@@ -1,0 +1,10 @@
+pandas
+yfinance
+prophet
+tensorflow
+scikit-learn
+openai
+requests
+technical-analysis
+tenacity
+streamlit
