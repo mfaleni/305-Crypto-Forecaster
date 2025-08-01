@@ -57,21 +57,30 @@ coin_forecast = forecast_df[forecast_df['Coin'] == selected_coin].iloc[0]
 st.header(f"Today's Overview for {selected_coin}")
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Actual Price", f"${coin_forecast['Actual_Price']:,.2f}")
-col2.metric("All-Time High", f"${coin_forecast['All_Time_High']:,.2f}")
+
+# FIX: Add a check to prevent KeyError if the column doesn't exist in an old CSV
+if 'All_Time_High' in coin_forecast:
+    col2.metric("All-Time High", f"${coin_forecast['All_Time_High']:,.2f}")
+else:
+    col2.metric("All-Time High", "N/A")
+
 col3.metric("Sentiment Score", f"{coin_forecast['Sentiment_Score']:.2f}")
 
 st.header("5-Day High Forecast vs. Historical Highs")
-if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast:
+if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']):
     historical_highs = chart_data[['High']].tail(5)
     historical_highs.index = historical_highs.index.strftime('%Y-%m-%d')
     try:
         forecast_data = json.loads(coin_forecast['High_Forecast_5_Day'])
-        forecast_df_highs = pd.DataFrame(forecast_data)
-        forecast_df_highs['ds'] = pd.to_datetime(forecast_df_highs['ds']).dt.strftime('%Y-%m-%d')
-        forecast_df_highs = forecast_df_highs.rename(columns={'ds': 'Date', 'yhat': 'Forecasted High'}).set_index('Date')
-        combined_df = pd.concat([historical_highs, forecast_df_highs], axis=1)
-        st.bar_chart(combined_df)
-        st.dataframe(combined_df)
+        if forecast_data: # Ensure forecast data is not empty
+            forecast_df_highs = pd.DataFrame(forecast_data)
+            forecast_df_highs['ds'] = pd.to_datetime(forecast_df_highs['ds']).dt.strftime('%Y-%m-%d')
+            forecast_df_highs = forecast_df_highs.rename(columns={'ds': 'Date', 'yhat': 'Forecasted High'}).set_index('Date')
+            combined_df = pd.concat([historical_highs, forecast_df_highs], axis=1)
+            st.bar_chart(combined_df)
+            st.dataframe(combined_df)
+        else:
+            st.warning("Forecast data is empty.")
     except (json.JSONDecodeError, TypeError):
         st.error("Could not parse the 5-day forecast data.")
 else:
@@ -188,4 +197,3 @@ if chart_data is not None:
 
 st.sidebar.markdown("---")
 st.sidebar.info("This dashboard is for educational purposes only and is not financial advice.")
-
