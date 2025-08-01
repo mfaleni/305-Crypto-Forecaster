@@ -8,4 +8,4 @@ crypto_env/
 
 # IDE
 .vscode/
-.idea/
+.idea/.env
