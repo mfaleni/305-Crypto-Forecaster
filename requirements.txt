@@ -8,3 +8,4 @@ requests==2.31.0
 ta==0.10.2
 tenacity==8.2.3
 streamlit==1.32.2
+font-manager
