@@ -4,6 +4,15 @@ import numpy as np
 import os
 import json
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Load environment variables from .env
+
+openai.api_key = os.getenv("REMOVED_OPENAI_KEY")
+news_api_key = os.getenv("REMOVED_NEWSAPI_KEY")
+
+
 # Import project modules
 from data_utils import fetch_data
 from forecasting import prophet_forecast, lstm_forecast, prophet_forecast_highs
