@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import time
 import json
+import numpy as np
 
 # Import project modules
 from daily_runner import run_daily_analysis, RESULTS_FILE, DATA_DIR
@@ -44,6 +45,27 @@ def load_chart_data(ticker):
         return pd.read_csv(file_path, index_col=0, parse_dates=True)
     return None
 
+# --- Function to format numeric columns with commas ---
+def format_numeric_columns(df):
+    formatted_df = df.copy()
+    numeric_cols = [
+        'Actual_Price', 'Prophet_Forecast', 'LSTM_Forecast', 'All_Time_High',
+        'High', 'Low', 'Close', 'Open', 'Volume', 'SMA', 'EMA',
+        'BB_High', 'BB_Low', 'RSI', 'MACD', 'MACD_Signal', 'OBV',
+        'Ichimoku_a', 'Ichimoku_b', 'Active_Addresses', 'Transaction_Volume',
+        'Forecasted High' # Added this for the combined dataframe
+    ]
+    for col in numeric_cols:
+        if col in formatted_df.columns:
+            # Use try-except for robustness against non-numeric data
+            try:
+                formatted_df[col] = formatted_df[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) and np.issubdtype(type(x), np.number) else x)
+            except (ValueError, TypeError):
+                # If a column contains non-numeric data, leave it as is
+                pass
+    return formatted_df
+
+
 # --- Sidebar & Main Content ---
 st.sidebar.header("Dashboard Options")
 selected_coin = st.sidebar.selectbox("Select a Cryptocurrency", forecast_df['Coin'].unique())
@@ -58,13 +80,23 @@ st.header(f"Today's Overview for {selected_coin}")
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Actual Price", f"${coin_forecast['Actual_Price']:,.2f}")
 
-# FIX: Add a check to prevent KeyError if the column doesn't exist in an old CSV
-if 'All_Time_High' in coin_forecast:
+if 'All_Time_High' in coin_forecast and pd.notna(coin_forecast['All_Time_High']):
     col2.metric("All-Time High", f"${coin_forecast['All_Time_High']:,.2f}")
 else:
     col2.metric("All-Time High", "N/A")
 
 col3.metric("Sentiment Score", f"{coin_forecast['Sentiment_Score']:.2f}")
+
+with st.expander("❓ **Explain the Sentiment Score**"):
+    st.info(
+        """
+        The **Sentiment Score** is an aggregated value from a natural language processing (NLP) analysis of recent news articles.
+        - **A positive score** (e.g., > 0.10) indicates a **bullish sentiment** towards the cryptocurrency.
+        - **A negative score** (e.g., < -0.10) indicates a **bearish sentiment**.
+        - **A score close to zero** indicates a **neutral market sentiment**.
+        This score is a key fundamental indicator, as news and public opinion often precede price movements.
+        """
+    )
 
 st.header("5-Day High Forecast vs. Historical Highs")
 if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']):
@@ -72,13 +104,13 @@ if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notn
     historical_highs.index = historical_highs.index.strftime('%Y-%m-%d')
     try:
         forecast_data = json.loads(coin_forecast['High_Forecast_5_Day'])
-        if forecast_data: # Ensure forecast data is not empty
+        if forecast_data:
             forecast_df_highs = pd.DataFrame(forecast_data)
             forecast_df_highs['ds'] = pd.to_datetime(forecast_df_highs['ds']).dt.strftime('%Y-%m-%d')
             forecast_df_highs = forecast_df_highs.rename(columns={'ds': 'Date', 'yhat': 'Forecasted High'}).set_index('Date')
             combined_df = pd.concat([historical_highs, forecast_df_highs], axis=1)
             st.bar_chart(combined_df)
-            st.dataframe(combined_df)
+            st.dataframe(format_numeric_columns(combined_df))
         else:
             st.warning("Forecast data is empty.")
     except (json.JSONDecodeError, TypeError):
@@ -140,6 +172,7 @@ if chart_data is not None:
         """
         **Reasoning:** This is an all-in-one indicator that provides information on support, resistance, trend direction, and momentum.
         - **Action:** If the price is above the cloud, the overall trend is considered bullish. If the price is below the cloud, the trend is bearish. The cloud itself also acts as a dynamic zone of support or resistance.
+        - **Ichimoku Cloud A vs. B:** The cloud is formed by the Senkou Span A (`Ichimoku_a`) and Senkou Span B (`Ichimoku_b`). When **A is above B**, the cloud is typically green and signals a **bullish trend**. When **B is above A**, the cloud is red and signals a **bearish trend**. The cloud's thickness indicates the strength of the trend.
         """
     )
 else:
@@ -152,8 +185,8 @@ if chart_data is not None:
     st.info(
         """
         **Reasoning:** On-chain data provides a direct view of a blockchain's health and user activity. (Note: These values are simulated).
-        - **Active Addresses:** A rising number indicates growing user adoption and network effect.
-        - **Transaction Volume:** High volume confirms the strength of a price trend.
+        - **Active Addresses:** A rising number indicates growing user adoption and network effect. **Understanding its importance:** A consistent increase in active addresses is a strong signal of a healthy and growing network, often a leading indicator of future price appreciation. A sudden drop can signal a loss of user interest.
+        - **Transaction Volume:** High volume confirms the strength of a price trend. **Understanding its importance:** Volume confirms the conviction behind a price movement. A strong price increase on high volume is a bullish confirmation, while a price increase on low volume may signal a weak trend that is likely to reverse.
         - **TVL (Total Value Locked):** In DeFi, a high TVL suggests a healthy, trusted ecosystem.
         - **Realized PnL:** Shows whether the market is in a state of profit-taking (high PnL) or panic-selling (low PnL).
         """
@@ -190,10 +223,10 @@ else:
 # --- Raw Data Section ---
 st.header("Raw Data Viewer")
 st.subheader("Forecast Summary Data")
-st.dataframe(forecast_df)
+st.dataframe(format_numeric_columns(forecast_df))
 st.subheader(f"Full Indicator Data for {selected_coin}")
 if chart_data is not None:
-    st.dataframe(chart_data)
+    st.dataframe(format_numeric_columns(chart_data))
 
 st.sidebar.markdown("---")
 st.sidebar.info("This dashboard is for educational purposes only and is not financial advice.")
