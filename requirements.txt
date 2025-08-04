@@ -74,7 +74,7 @@ pytz==2025.2
 referencing==0.36.2
 requests==2.32.4
 rich==14.0.0
-rpds-py==0.26.2
+rpds-py
 scikit-learn==1.7.0
 scipy==1.15.3
 six==1.17.0
