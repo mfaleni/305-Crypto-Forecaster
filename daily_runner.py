@@ -7,25 +7,21 @@ import openai
 from frozendict import frozendict
 from dotenv import load_dotenv
 
-# --- CORRECTED: Load and set API Keys ---
-load_dotenv()  # Load environment variables from .env file
+# --- Robust Path Configuration ---
+# Get the absolute path of the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Use Render's disk path if an environment variable is set, otherwise use the script's directory
+MOUNT_PATH = os.getenv("CRYPTO_DATA_PATH", SCRIPT_DIR)
+# ---------------------------------
+
+# --- Load and set API Keys ---
+load_dotenv()
 openai.api_key = os.getenv("REMOVED_OPENAI_KEY")
 news_api_key = os.getenv("REMOVED_NEWSAPI_KEY")
 
-# Check if keys are loaded
 if not openai.api_key or not news_api_key:
     print("❌ [FATAL] OpenAI or NewsAPI key not found. Please set them in your .env file or environment variables.")
     exit()
-# -----------------------------------------
-
-# --- Configuration ---
-COINS = {
-    "BTC-USD": "Bitcoin",
-    "ETH-USD": "Ethereum",
-    "XRP-USD": "XRP",
-}
-RESULTS_FILE = 'forecast_results.csv'
-DATA_DIR = 'data'
 
 # --- Module Imports ---
 try:
@@ -36,6 +32,10 @@ except ImportError as e:
     print(f"❌ [FATAL] Failed to import a required module: {e}. Exiting.")
     exit()
 
+# --- Configuration ---
+COINS = {"BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "XRP-USD": "XRP"}
+RESULTS_FILE = os.path.join(MOUNT_PATH, 'forecast_results.csv')
+DATA_DIR = os.path.join(MOUNT_PATH, 'data')
 
 # Helper function to convert non-serializable objects
 def default_json_serializer(obj):
@@ -47,7 +47,7 @@ def default_json_serializer(obj):
 
 def run_daily_analysis():
     """
-    Orchestrates the daily analysis with robust error handling.
+    Orchestrates the daily analysis with robust error handling and correct file paths.
     """
     print("✅ [START] Kicking off daily crypto forecasting run...")
     today = datetime.today().strftime("%Y-%m-%d")
@@ -73,10 +73,7 @@ def run_daily_analysis():
             actual_price = market_data["Close"].iloc[-1]
             prophet_price = prophet_forecast(market_data.copy())
             lstm_price = lstm_forecast(market_data.copy())
-            
-            # Pass the loaded news_api_key to the function
             sentiment_score = get_news_sentiment(coin_ticker=ticker, coin_name=name, api_key=news_api_key)
-            
             high_forecasts_list = prophet_forecast_highs(market_data.copy(), periods=5)
             
             result = {
