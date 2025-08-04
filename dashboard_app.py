@@ -1,70 +1,62 @@
 import streamlit as st
 import pandas as pd
 import os
-import time
 import json
 import numpy as np
-
-# Import project modules
-from daily_runner import run_daily_analysis, RESULTS_FILE, DATA_DIR
 
 # --- Page Configuration ---
 st.set_page_config(page_title="305 Crypto Forecast", page_icon="📈", layout="wide")
 
-# --- Data Loading Logic ---
-should_run_analysis = False
-if not os.path.exists(RESULTS_FILE):
-    st.warning("Data file not found. A fresh analysis will be run.")
-    should_run_analysis = True
-else:
-    file_age = time.time() - os.path.getmtime(RESULTS_FILE)
-    if file_age > 86400: # 24 hours
-        st.info("Data is older than 24 hours. Running a fresh analysis.")
-        should_run_analysis = True
+# --- File Paths ---
+RESULTS_FILE = 'forecast_results.csv'
+DATA_DIR = 'data'
 
-if should_run_analysis:
-    with st.spinner("🚀 Running fresh analysis... This may take a few minutes."):
-        run_daily_analysis()
-    st.success("✅ Analysis complete!")
-    st.experimental_rerun()
+# --- Caching Functions for Performance ---
+@st.cache_data(ttl=3600) # Cache for 1 hour
+def load_summary_data(file_path):
+    if not os.path.exists(file_path):
+        return None
+    return pd.read_csv(file_path)
+
+@st.cache_data(ttl=3600) # Cache for 1 hour
+def load_chart_data(ticker):
+    file_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
+    if os.path.exists(file_path):
+        try:
+            return pd.read_csv(file_path, index_col=0, parse_dates=True)
+        except Exception:
+            return None
+    return None
 
 # --- Main Application ---
 st.title("📈 305 Crypto Forecast Dashboard")
 st.markdown("An automated forecasting and sentiment analysis system for major cryptocurrencies.")
 
-try:
-    forecast_df = pd.read_csv(RESULTS_FILE)
-except FileNotFoundError:
-    st.error("Summary data file not found. Please wait for analysis to complete.")
+# --- Data Loading ---
+forecast_df = load_summary_data(RESULTS_FILE)
+
+if forecast_df is None:
+    st.error("🚨 Forecast data file not found. The daily analysis may not have run yet. Please check back later.")
     st.stop()
 
-@st.cache_data
-def load_chart_data(ticker):
-    file_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
-    if os.path.exists(file_path):
-        return pd.read_csv(file_path, index_col=0, parse_dates=True)
-    return None
-
-# --- Function to format numeric columns with commas ---
+# --- Utility Function ---
 def format_numeric_columns(df):
+    # This function remains the same as yours
     formatted_df = df.copy()
     numeric_cols = [
         'Actual_Price', 'Prophet_Forecast', 'LSTM_Forecast', 'All_Time_High',
         'High', 'Low', 'Close', 'Open', 'Volume', 'SMA', 'EMA',
         'BB_High', 'BB_Low', 'RSI', 'MACD', 'MACD_Signal', 'OBV',
         'Ichimoku_a', 'Ichimoku_b', 'Active_Addresses', 'Transaction_Volume',
-        'Forecasted High' # Added this for the combined dataframe
+        'Forecasted High'
     ]
     for col in numeric_cols:
         if col in formatted_df.columns:
-            # Use try-except for robustness against non-numeric data
             try:
                 formatted_df[col] = formatted_df[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) and np.issubdtype(type(x), np.number) else x)
             except (ValueError, TypeError):
-                # If a column contains non-numeric data, leave it as is
                 pass
     return formatted_df
-
 
 # --- Sidebar & Main Content ---
 st.sidebar.header("Dashboard Options")
@@ -73,20 +65,19 @@ selected_coin = st.sidebar.selectbox("Select a Cryptocurrency", forecast_df['Coi
 chart_data = load_chart_data(selected_coin)
 coin_forecast = forecast_df[forecast_df['Coin'] == selected_coin].iloc[0]
 
-# --- Main Page Layout (Single Page) ---
-
-# --- Overview & Forecast Section ---
+# --- Main Page Layout ---
 st.header(f"Today's Overview for {selected_coin}")
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Actual Price", f"${coin_forecast['Actual_Price']:,.2f}")
 
-if 'All_Time_High' in coin_forecast and pd.notna(coin_forecast['All_Time_High']):
-    col2.metric("All-Time High", f"${coin_forecast['All_Time_High']:,.2f}")
-else:
-    col2.metric("All-Time High", "N/A")
+actual_price = pd.to_numeric(coin_forecast['Actual_Price'], errors='coerce')
+all_time_high = pd.to_numeric(coin_forecast['All_Time_High'], errors='coerce')
+sentiment_score = pd.to_numeric(coin_forecast['Sentiment_Score'], errors='coerce')
 
-col3.metric("Sentiment Score", f"{coin_forecast['Sentiment_Score']:.2f}")
+col1.metric("Actual Price", f"${actual_price:,.2f}" if pd.notna(actual_price) else "N/A")
+col2.metric("All-Time High", f"${all_time_high:,.2f}" if pd.notna(all_time_high) else "N/A")
+col3.metric("Sentiment Score", f"{sentiment_score:.2f}" if pd.notna(sentiment_score) else "N/A")
 
+# --- DESCRIPTION RESTORED ---
 with st.expander("❓ **Explain the Sentiment Score**"):
     st.info(
         """
@@ -99,11 +90,11 @@ with st.expander("❓ **Explain the Sentiment Score**"):
     )
 
 st.header("5-Day High Forecast vs. Historical Highs")
-if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']):
+if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']) and coin_forecast['High_Forecast_5_Day'] != 'N/A':
     historical_highs = chart_data[['High']].tail(5)
     historical_highs.index = historical_highs.index.strftime('%Y-%m-%d')
     try:
-        forecast_data = json.loads(coin_forecast['High_Forecast_5_Day'])
+        forecast_data = json.loads(str(coin_forecast['High_Forecast_5_Day']))
         if forecast_data:
             forecast_df_highs = pd.DataFrame(forecast_data)
             forecast_df_highs['ds'] = pd.to_datetime(forecast_df_highs['ds']).dt.strftime('%Y-%m-%d')
@@ -112,17 +103,17 @@ if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notn
             st.bar_chart(combined_df)
             st.dataframe(format_numeric_columns(combined_df))
         else:
-            st.warning("Forecast data is empty.")
-    except (json.JSONDecodeError, TypeError):
-        st.error("Could not parse the 5-day forecast data.")
+            st.warning("Forecast data is available but empty.")
+    except (json.JSONDecodeError, TypeError) as e:
+        st.error(f"Could not parse the 5-day forecast data. Error: {e}")
 else:
     st.warning(f"Could not load 5-day forecast data for {selected_coin}.")
-
-# --- Technical Analysis Section ---
+    
 st.header(f"Technical Indicators for {selected_coin}")
 if chart_data is not None:
     st.subheader("Price, Moving Averages, & Bollinger Bands")
     st.line_chart(chart_data[['Close', 'SMA', 'EMA', 'BB_High', 'BB_Low']])
+    # --- DESCRIPTION RESTORED ---
     st.info(
         """
         **Reasoning:** These indicators help identify the current trend and volatility.
@@ -135,6 +126,7 @@ if chart_data is not None:
     with tech_col1:
         st.subheader("RSI (Relative Strength Index)")
         st.line_chart(chart_data['RSI'])
+        # --- DESCRIPTION RESTORED ---
         st.info(
             """
             **Reasoning:** RSI measures the speed and change of price movements to identify overbought or oversold conditions.
@@ -143,6 +135,7 @@ if chart_data is not None:
         )
         st.subheader("Stochastic Oscillator")
         st.line_chart(chart_data[['Stoch_k', 'Stoch_d']])
+        # --- DESCRIPTION RESTORED ---
         st.info(
             """
             **Reasoning:** This momentum indicator compares a specific closing price to a range of its prices over time.
@@ -152,6 +145,7 @@ if chart_data is not None:
     with tech_col2:
         st.subheader("MACD (Moving Average Convergence Divergence)")
         st.line_chart(chart_data[['MACD', 'MACD_Signal']])
+        # --- DESCRIPTION RESTORED ---
         st.info(
             """
             **Reasoning:** MACD is a trend-following momentum indicator that shows the relationship between two moving averages.
@@ -160,6 +154,7 @@ if chart_data is not None:
         )
         st.subheader("OBV (On-Balance Volume)")
         st.line_chart(chart_data['OBV'])
+        # --- DESCRIPTION RESTORED ---
         st.info(
             """
             **Reasoning:** OBV uses volume flow to predict price changes. The idea is that volume precedes price.
@@ -168,6 +163,7 @@ if chart_data is not None:
         )
     st.subheader("Ichimoku Cloud")
     st.line_chart(chart_data[['Ichimoku_a', 'Ichimoku_b', 'Close']])
+    # --- DESCRIPTION RESTORED ---
     st.info(
         """
         **Reasoning:** This is an all-in-one indicator that provides information on support, resistance, trend direction, and momentum.
@@ -178,10 +174,10 @@ if chart_data is not None:
 else:
     st.warning(f"Could not load technical indicator data for {selected_coin}.")
 
-# --- On-Chain & Fundamentals Section ---
 st.header(f"On-Chain & Fundamental Indicators for {selected_coin}")
 if chart_data is not None:
     st.subheader("On-Chain Indicators (Simulated)")
+    # --- DESCRIPTION RESTORED ---
     st.info(
         """
         **Reasoning:** On-chain data provides a direct view of a blockchain's health and user activity. (Note: These values are simulated).
@@ -200,6 +196,7 @@ if chart_data is not None:
         st.bar_chart(chart_data['Transaction_Volume'])
 
     st.subheader("Fundamental Indicators (Simulated)")
+    # --- DESCRIPTION RESTORED ---
     st.info(
         """
         **Reasoning:** These scores assess the long-term viability and intrinsic value of a project. (Note: These values are simulated).
