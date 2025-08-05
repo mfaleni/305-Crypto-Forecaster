@@ -1,6 +1,3 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 import streamlit as st
 import pandas as pd
 import os
@@ -8,22 +5,17 @@ import json
 import numpy as np
 from db_utils import load_forecast_results
 
-# --- Page Configuration ---
 st.set_page_config(page_title="305 Crypto Forecast", page_icon="📈", layout="wide")
 
-# --- Path Configuration for local daily data ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
 
-# --- Caching Functions ---
 @st.cache_data(ttl=3600)
 def get_historical_data():
-    """Loads all forecast data from the database."""
     return load_forecast_results()
 
 @st.cache_data(ttl=3600)
 def load_chart_data(ticker):
-    """Loads the detailed indicator data from the local CSV file."""
     file_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
     if os.path.exists(file_path):
         try:
@@ -32,49 +24,37 @@ def load_chart_data(ticker):
             return None
     return None
 
-# --- Main Application ---
 st.title("📈 305 Crypto Forecast Dashboard")
 st.markdown("An automated forecasting and sentiment analysis system for major cryptocurrencies.")
-
 historical_df = get_historical_data()
-
 if historical_df.empty:
     st.error("🚨 No forecast data found in the database. The daily analysis may not have run yet.")
     st.stop()
 
-# --- Data Preparation ---
-# Get the most recent forecast date
 latest_date = historical_df['Date'].max()
-# Filter for only the most recent results to display the "Today's Overview"
 latest_forecast_df = historical_df[historical_df['Date'] == latest_date].copy()
 
-# --- Utility Function ---
 def format_numeric_columns(df):
     formatted_df = df.copy()
     numeric_cols = [
-        'Actual_Price', 'Prophet_Forecast', 'LSTM_Forecast', 'All_Time_High',
-        'High', 'Low', 'Close', 'Open', 'Volume', 'SMA', 'EMA',
-        'BB_High', 'BB_Low', 'RSI', 'MACD', 'MACD_Signal', 'OBV',
-        'Ichimoku_a', 'Ichimoku_b', 'Active_Addresses', 'Transaction_Volume',
-        'Forecasted High'
+        'Actual_Price', 'Prophet_Forecast', 'LSTM_Forecast', 'All_Time_High', 'RSI', 'MACD',
+        'High', 'Low', 'Close', 'Open', 'Volume', 'SMA', 'EMA', 'BB_High', 'BB_Low', 'Stoch_k', 'Stoch_d', 'OBV',
+        'Ichimoku_a', 'Ichimoku_b', 'Transaction_Volume_24h', 'Circulating_Supply', 'Market_Cap_Rank', 
+        'Community_Score', 'Developer_Score', 'Sentiment_Up_Percentage', 'Forecasted High'
     ]
     for col in numeric_cols:
         if col in formatted_df.columns:
             try:
-                # Apply formatting only to numeric types to avoid errors
                 formatted_df[col] = formatted_df[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) and isinstance(x, (int, float)) else x)
             except (ValueError, TypeError):
                 pass
     return formatted_df
 
-# --- Sidebar & Main Content ---
 st.sidebar.header("Dashboard Options")
 selected_coin = st.sidebar.selectbox("Select a Cryptocurrency", latest_forecast_df['Coin'].unique())
-
 chart_data = load_chart_data(selected_coin)
 coin_forecast = latest_forecast_df[latest_forecast_df['Coin'] == selected_coin].iloc[0]
 
-# --- Main Page Layout ---
 st.header(f"Today's Overview for {selected_coin}")
 col1, col2, col3, col4 = st.columns(4)
 actual_price = pd.to_numeric(coin_forecast['Actual_Price'], errors='coerce')
@@ -88,12 +68,38 @@ with st.expander("❓ **Explain the Sentiment Score**"):
     st.info(
         """
         The **Sentiment Score** is an aggregated value from a natural language processing (NLP) analysis of recent news articles.
-        - **A positive score** (e.g., > 0.10) indicates a **bullish sentiment** towards the cryptocurrency.
-        - **A negative score** (e.g., < -0.10) indicates a **bearish sentiment**.
-        - **A score close to zero** indicates a **neutral market sentiment**.
-        This score is a key fundamental indicator, as news and public opinion often precede price movements.
+        - A positive score (> 0.10) indicates a **bullish sentiment**.
+        - A negative score (< -0.10) indicates a **bearish sentiment**.
+        - A score close to zero indicates a **neutral market sentiment**.
         """
     )
+
+st.header("Daily AI Analysis")
+with st.container(border=True):
+    summary = coin_forecast.get('analysis_summary', 'Analysis not available.')
+    hypothesis = coin_forecast.get('analysis_hypothesis', 'Hypothesis not available.')
+    news_links_json = coin_forecast.get('analysis_news_links', '[]')
+    
+    st.subheader("Today's Summary")
+    st.markdown(summary)
+    
+    st.subheader("Analyst's Hypothesis")
+    st.markdown(hypothesis)
+    
+    st.subheader("Influential News")
+    try:
+        news_links = json.loads(news_links_json) if pd.notna(news_links_json) else []
+        if news_links:
+            for item in news_links:
+                st.markdown(f"- [{item['title']}]({item['url']})")
+        else:
+            st.write("No specific news articles were identified as highly influential today.")
+    except (json.JSONDecodeError, TypeError):
+        st.write("Could not parse news links.")
+
+    st.markdown("---")
+    if st.button("This analysis was helpful 👍", key=f"feedback_{coin_forecast['id']}"):
+        st.toast("Thank you for your feedback!", icon="🎉")
 
 st.header("5-Day High Forecast vs. Historical Highs")
 if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']):
@@ -110,8 +116,8 @@ if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notn
             st.dataframe(format_numeric_columns(combined_df.reset_index()))
         else:
             st.warning("Forecast data is available but empty.")
-    except (json.JSONDecodeError, TypeError) as e:
-        st.error(f"Could not parse the 5-day forecast data. Error: {e}")
+    except (json.JSONDecodeError, TypeError):
+        st.error("Could not parse the 5-day forecast data.")
 else:
     st.warning(f"Could not load 5-day forecast data for {selected_coin}.")
 
@@ -126,7 +132,6 @@ if chart_data is not None:
         - **Bollinger Bands:** The bands widen during high volatility and narrow during low volatility. A price touching the upper band may suggest it's overbought, while touching the lower band may suggest it's oversold.
         """
     )
-    
     tech_col1, tech_col2 = st.columns(2)
     with tech_col1:
         st.subheader("RSI (Relative Strength Index)")
@@ -142,7 +147,7 @@ if chart_data is not None:
         st.info(
             """
             **Reasoning:** This momentum indicator compares a specific closing price to a range of its prices over time.
-            - **Action:** Like RSI, readings above 80 indicate overbought conditions, while readings below 20 indicate oversold conditions. Crossovers between the %K and %D lines can also be used as buy or sell signals.
+            - **Action:** Like RSI, readings above 80 indicate overbought conditions, while readings below 20 indicate oversold conditions.
             """
         )
     with tech_col2:
@@ -151,15 +156,15 @@ if chart_data is not None:
         st.info(
             """
             **Reasoning:** MACD is a trend-following momentum indicator that shows the relationship between two moving averages.
-            - **Action:** When the MACD line (blue) crosses above the Signal line (orange), it's a bullish signal, suggesting it may be a good time to buy. When it crosses below, it's a bearish signal.
+            - **Action:** When the MACD line crosses above the Signal line, it's a bullish signal. When it crosses below, it's a bearish signal.
             """
         )
         st.subheader("OBV (On-Balance Volume)")
         st.line_chart(chart_data['OBV'])
         st.info(
             """
-            **Reasoning:** OBV uses volume flow to predict price changes. The idea is that volume precedes price.
-            - **Action:** A rising OBV indicates positive volume pressure that can confirm an uptrend. A falling OBV suggests negative pressure that could signal a downtrend.
+            **Reasoning:** OBV uses volume flow to predict price changes.
+            - **Action:** A rising OBV indicates positive volume pressure that can confirm an uptrend. A falling OBV suggests negative pressure.
             """
         )
     st.subheader("Ichimoku Cloud")
@@ -167,36 +172,30 @@ if chart_data is not None:
     st.info(
         """
         **Reasoning:** This is an all-in-one indicator that provides information on support, resistance, trend direction, and momentum.
-        - **Action:** If the price is above the cloud, the overall trend is considered bullish. If the price is below the cloud, the trend is bearish. The cloud itself also acts as a dynamic zone of support or resistance.
-        - **Ichimoku Cloud A vs. B:** The cloud is formed by the Senkou Span A (`Ichimoku_a`) and Senkou Span B (`Ichimoku_b`). When **A is above B**, the cloud is typically green and signals a **bullish trend**. When **B is above A**, the cloud is red and signals a **bearish trend**. The cloud's thickness indicates the strength of the trend.
+        - **Action:** If the price is above the cloud, the trend is bullish. If below, the trend is bearish.
         """
     )
 else:
     st.warning(f"Could not load technical indicator data for {selected_coin}.")
 
-# In dashboard_app.py, find and replace this entire section:
-
 st.header(f"On-Chain & Fundamental Indicators for {selected_coin}")
 if chart_data is not None:
     st.subheader("On-Chain & Market Indicators (from CoinGecko)")
-    # --- THIS IS THE CORRECTED DESCRIPTION ---
     st.info(
         """
         **Reasoning:** These metrics provide a direct view of a blockchain's recent market activity. (Source: CoinGecko)
-        - **Transaction Volume (24h):** The total value in USD of all transactions for this asset in the last 24 hours. High volume can help confirm the strength of a price trend.
-        - **Circulating Supply:** The number of coins that are publicly available and circulating in the market. This is a key metric for calculating market capitalization and assessing scarcity.
+        - **Transaction Volume (24h):** The total value in USD of all transactions for this asset in the last 24 hours.
+        - **Circulating Supply:** The number of coins publicly available and circulating in the market.
         """
     )
     onchain_col1, onchain_col2 = st.columns(2)
     with onchain_col1:
         st.subheader("Transaction Volume (24h)")
-        # Display as a single metric since it's a daily value, not historical
         if 'Transaction_Volume_24h' in chart_data.columns:
             latest_volume = chart_data['Transaction_Volume_24h'].iloc[-1]
             st.metric("Volume (USD)", f"${latest_volume:,.2f}")
         else:
             st.metric("Volume (USD)", "N/A")
-
     with onchain_col2:
         st.subheader("Circulating Supply")
         if 'Circulating_Supply' in chart_data.columns:
@@ -204,15 +203,13 @@ if chart_data is not None:
             st.metric("Supply", f"{latest_supply:,.0f} {selected_coin.split('-')[0]}")
         else:
             st.metric("Supply", "N/A")
-
-
     st.subheader("Fundamental Indicators (from CoinGecko)")
     st.info(
         """
         **Reasoning:** These scores assess the long-term viability, community health, and development activity of a project. (Source: CoinGecko)
-        - **Market Cap Rank:** The project's rank relative to all other cryptocurrencies by market capitalization.
-        - **Community Score:** A score based on Twitter followers, Telegram members, Reddit subscribers, etc.
-        - **Developer Score:** A score based on GitHub activity like commits, stars, and forks.
+        - **Market Cap Rank:** The project's rank relative to all other cryptocurrencies.
+        - **Community Score:** A score based on social media activity.
+        - **Developer Score:** A score based on GitHub activity.
         - **Sentiment:** The percentage of users who voted "Good" on CoinGecko.
         """
     )
@@ -222,17 +219,14 @@ if chart_data is not None:
     fund_col2.metric("Community Score", f"{latest_fundamentals.get('Community_Score', 0):.1f}")
     fund_col3.metric("Developer Score", f"{latest_fundamentals.get('Developer_Score', 0):.1f}")
     fund_col4.metric("Sentiment (Up %)", f"{latest_fundamentals.get('Sentiment_Up_Percentage', 0):.1f}%")
-
 else:
     st.warning(f"Could not load on-chain or fundamental data for {selected_coin}.")
 
-# --- Raw Data Section ---
 st.header("Raw Data Viewer")
 st.subheader("Full Historical Forecast Data")
 st.dataframe(format_numeric_columns(historical_df))
 st.subheader(f"Full Daily Indicator Data for {selected_coin}")
 if chart_data is not None:
     st.dataframe(format_numeric_columns(chart_data))
-
 st.sidebar.markdown("---")
 st.sidebar.info("This is for educational purposes only and is not financial advice.")

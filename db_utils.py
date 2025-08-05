@@ -9,7 +9,6 @@ if not DATABASE_URL:
 engine = create_engine(DATABASE_URL)
 metadata = MetaData()
 
-# Define the structure of our forecasts table
 forecasts_table = Table('forecasts', metadata,
     Column('id', Integer, primary_key=True, autoincrement=True),
     Column('Date', DateTime, nullable=False),
@@ -21,13 +20,13 @@ forecasts_table = Table('forecasts', metadata,
     Column('RSI', Float),
     Column('MACD', Float),
     Column('All_Time_High', Float),
-    Column('High_Forecast_5_Day', String)
+    Column('High_Forecast_5_Day', String),
+    Column('analysis_summary', String),
+    Column('analysis_hypothesis', String),
+    Column('analysis_news_links', String)
 )
 
 def init_db():
-    """
-    Initializes the database and creates the 'forecasts' table if it doesn't exist.
-    """
     print("   [INFO] Initializing database...")
     try:
         inspector = inspect(engine)
@@ -42,9 +41,6 @@ def init_db():
         raise
 
 def save_forecast_results(results_df: pd.DataFrame):
-    """
-    Saves a DataFrame of forecast results to the database.
-    """
     print("   [INFO] Saving forecast results to the database...")
     try:
         results_df['Date'] = pd.to_datetime(results_df['Date'])
@@ -55,9 +51,6 @@ def save_forecast_results(results_df: pd.DataFrame):
         raise
 
 def load_forecast_results() -> pd.DataFrame:
-    """
-    Loads all historical forecast results from the database.
-    """
     print("   [INFO] Loading forecast results from the database...")
     try:
         query = text("SELECT * FROM forecasts ORDER BY \"Date\" DESC")
