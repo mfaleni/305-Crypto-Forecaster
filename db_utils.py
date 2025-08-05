@@ -18,6 +18,8 @@ forecasts_table = Table('forecasts', metadata,
     Column('Prophet_Forecast', Float),
     Column('LSTM_Forecast', Float),
     Column('Sentiment_Score', Float),
+    Column('RSI', Float), # <--- CHANGE: ADDED THIS LINE --->
+    Column('MACD', Float), # <--- CHANGE: ADDED THIS LINE --->
     Column('All_Time_High', Float),
     Column('High_Forecast_5_Day', String) # Storing as a JSON string
 )
@@ -55,16 +57,4 @@ def save_forecast_results(results_df: pd.DataFrame):
 
 def load_forecast_results() -> pd.DataFrame:
     """
-    Loads all historical forecast results from the database.
-    """
-    print("   [INFO] Loading forecast results from the database...")
-    try:
-        # Load the entire table, sort by Date descending to get the latest results first
-        query = text("SELECT * FROM forecasts ORDER BY \"Date\" DESC")
-        with engine.connect() as connection:
-            df = pd.read_sql_query(query, connection)
-        print(f"   [SUCCESS] Loaded {len(df)} records from the database.")
-        return df
-    except Exception as e:
-        print(f"❌ [ERROR] Could not load results from database: {e}")
-        return pd.DataFrame() # Return empty DataFrame on failure
+    Loads

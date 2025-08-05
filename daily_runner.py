@@ -3,7 +3,7 @@ from datetime import datetime
 import numpy as np
 import os
 import json
-import openai # <--- THIS LINE WAS MISSING
+import openai
 from frozendict import frozendict
 from dotenv import load_dotenv
 
@@ -54,16 +54,25 @@ def run_daily_analysis():
             detailed_data_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
             market_data.to_csv(detailed_data_path)
             print(f"   [INFO] Detailed daily data saved to {detailed_data_path}")
+            
             all_time_high = market_data['High'].max()
             actual_price = market_data["Close"].iloc[-1]
             prophet_price = prophet_forecast(market_data.copy())
             lstm_price = lstm_forecast(market_data.copy())
             sentiment_score = get_news_sentiment(coin_ticker=ticker, coin_name=name, api_key=news_api_key)
             high_forecasts_list = prophet_forecast_highs(market_data.copy(), periods=5)
+            
+            # <--- CHANGE: GET LATEST INDICATOR VALUES --->
+            latest_rsi = market_data["RSI"].iloc[-1]
+            latest_macd = market_data["MACD"].iloc[-1]
+            
             result = {
                 "Date": today, "Coin": ticker, "Actual_Price": actual_price,
                 "Prophet_Forecast": prophet_price, "LSTM_Forecast": lstm_price,
-                "Sentiment_Score": sentiment_score, "All_Time_High": all_time_high,
+                "Sentiment_Score": sentiment_score,
+                "RSI": latest_rsi, # <--- CHANGE: ADD RSI TO RESULTS --->
+                "MACD": latest_macd, # <--- CHANGE: ADD MACD TO RESULTS --->
+                "All_Time_High": all_time_high,
                 "High_Forecast_5_Day": json.dumps(high_forecasts_list, default=default_json_serializer)
             }
             all_results.append(result)
