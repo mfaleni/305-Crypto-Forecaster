@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 import pandas as pd
 import os
@@ -171,44 +174,55 @@ if chart_data is not None:
 else:
     st.warning(f"Could not load technical indicator data for {selected_coin}.")
 
+# In dashboard_app.py, find and replace this entire section:
+
 st.header(f"On-Chain & Fundamental Indicators for {selected_coin}")
 if chart_data is not None:
-    st.subheader("On-Chain Indicators (Simulated)")
+    st.subheader("On-Chain & Market Indicators (from CoinGecko)")
+    # --- THIS IS THE CORRECTED DESCRIPTION ---
     st.info(
         """
-        **Reasoning:** On-chain data provides a direct view of a blockchain's health and user activity. (Note: These values are simulated).
-        - **Active Addresses:** A rising number indicates growing user adoption and network effect. **Understanding its importance:** A consistent increase in active addresses is a strong signal of a healthy and growing network, often a leading indicator of future price appreciation. A sudden drop can signal a loss of user interest.
-        - **Transaction Volume:** High volume confirms the strength of a price trend. **Understanding its importance:** Volume confirms the conviction behind a price movement. A strong price increase on high volume is a bullish confirmation, while a price increase on low volume may signal a weak trend that is likely to reverse.
-        - **TVL (Total Value Locked):** In DeFi, a high TVL suggests a healthy, trusted ecosystem.
-        - **Realized PnL:** Shows whether the market is in a state of profit-taking (high PnL) or panic-selling (low PnL).
+        **Reasoning:** These metrics provide a direct view of a blockchain's recent market activity. (Source: CoinGecko)
+        - **Transaction Volume (24h):** The total value in USD of all transactions for this asset in the last 24 hours. High volume can help confirm the strength of a price trend.
+        - **Circulating Supply:** The number of coins that are publicly available and circulating in the market. This is a key metric for calculating market capitalization and assessing scarcity.
         """
     )
     onchain_col1, onchain_col2 = st.columns(2)
     with onchain_col1:
-        st.subheader("Active Addresses")
-        st.bar_chart(chart_data['Active_Addresses'])
-    with onchain_col2:
-        st.subheader("Transaction Volume")
-        st.bar_chart(chart_data['Transaction_Volume'])
+        st.subheader("Transaction Volume (24h)")
+        # Display as a single metric since it's a daily value, not historical
+        if 'Transaction_Volume_24h' in chart_data.columns:
+            latest_volume = chart_data['Transaction_Volume_24h'].iloc[-1]
+            st.metric("Volume (USD)", f"${latest_volume:,.2f}")
+        else:
+            st.metric("Volume (USD)", "N/A")
 
-    st.subheader("Fundamental Indicators (Simulated)")
+    with onchain_col2:
+        st.subheader("Circulating Supply")
+        if 'Circulating_Supply' in chart_data.columns:
+            latest_supply = chart_data['Circulating_Supply'].iloc[-1]
+            st.metric("Supply", f"{latest_supply:,.0f} {selected_coin.split('-')[0]}")
+        else:
+            st.metric("Supply", "N/A")
+
+
+    st.subheader("Fundamental Indicators (from CoinGecko)")
     st.info(
         """
-        **Reasoning:** These scores assess the long-term viability and intrinsic value of a project. (Note: These values are simulated).
-        - **Token Utility:** Does the token have a real purpose in the ecosystem?
-        - **Adoption Rate:** Is the project gaining traction and users?
-        - **Team Score:** Is the team experienced and reputable?
-        - **Tokenomics:** Is the token supply and distribution model sustainable?
-        - **Regulatory Risk:** What is the level of risk from government intervention?
+        **Reasoning:** These scores assess the long-term viability, community health, and development activity of a project. (Source: CoinGecko)
+        - **Market Cap Rank:** The project's rank relative to all other cryptocurrencies by market capitalization.
+        - **Community Score:** A score based on Twitter followers, Telegram members, Reddit subscribers, etc.
+        - **Developer Score:** A score based on GitHub activity like commits, stars, and forks.
+        - **Sentiment:** The percentage of users who voted "Good" on CoinGecko.
         """
     )
     latest_fundamentals = chart_data.iloc[-1]
-    fund_col1, fund_col2, fund_col3, fund_col4, fund_col5 = st.columns(5)
-    fund_col1.metric("Token Utility", f"{latest_fundamentals['Token_Utility']:.1f}")
-    fund_col2.metric("Adoption Rate", f"{latest_fundamentals['Adoption_Rate']:.1f}")
-    fund_col3.metric("Team Score", f"{latest_fundamentals['Team_Score']:.1f}")
-    fund_col4.metric("Tokenomics", f"{latest_fundamentals['Tokenomics_Score']:.1f}")
-    fund_col5.metric("Regulatory Risk", f"{latest_fundamentals['Regulatory_Risk']:.1f}", delta_color="inverse")
+    fund_col1, fund_col2, fund_col3, fund_col4 = st.columns(4)
+    fund_col1.metric("Market Cap Rank", f"#{latest_fundamentals.get('Market_Cap_Rank', 0):.0f}")
+    fund_col2.metric("Community Score", f"{latest_fundamentals.get('Community_Score', 0):.1f}")
+    fund_col3.metric("Developer Score", f"{latest_fundamentals.get('Developer_Score', 0):.1f}")
+    fund_col4.metric("Sentiment (Up %)", f"{latest_fundamentals.get('Sentiment_Up_Percentage', 0):.1f}%")
+
 else:
     st.warning(f"Could not load on-chain or fundamental data for {selected_coin}.")
 

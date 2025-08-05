@@ -1,17 +1,52 @@
 import pandas as pd
 import yfinance as yf
+import requests
 from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.trend import MACD, SMAIndicator, EMAIndicator, IchimokuIndicator
 from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
-from ta.utils import dropna
 import numpy as np
+
+# --- NEW: Helper function to get data from CoinGecko ---
+def fetch_coingecko_data(coin_id: str) -> dict:
+    """
+    Fetches fundamental and market data for a given coin from the CoinGecko API.
+    """
+    print(f"   [INFO] Fetching CoinGecko data for {coin_id}...")
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extracting useful metrics
+        metrics = {
+            'market_cap_rank': data.get('market_cap_rank', 0),
+            'community_score': data.get('community_score', 0),
+            'developer_score': data.get('developer_score', 0),
+            'sentiment_up_percentage': data.get('sentiment_votes_up_percentage', 0),
+            'total_volume': data.get('market_data', {}).get('total_volume', {}).get('usd', 0),
+            'circulating_supply': data.get('market_data', {}).get('circulating_supply', 0)
+        }
+        print("   [SUCCESS] CoinGecko data fetched.")
+        return metrics
+    except requests.exceptions.RequestException as e:
+        print(f"   [WARN] Could not fetch CoinGecko data for {coin_id}: {e}")
+        return {} # Return empty dict on failure
 
 def fetch_data(coin: str) -> pd.DataFrame:
     """
-    Fetches 180 days of historical cryptocurrency data and calculates a comprehensive
-    set of technical, on-chain, and fundamental indicators.
+    Fetches historical data and calculates technical indicators, then enriches
+    it with real fundamental & on-chain data from CoinGecko.
     """
+    # --- NEW: Mapping from Yahoo Finance Ticker to CoinGecko ID ---
+    coingecko_map = {
+        "BTC-USD": "bitcoin",
+        "ETH-USD": "ethereum",
+        "XRP-USD": "ripple", # Note: CoinGecko ID for XRP is 'ripple'
+    }
+    coin_id = coingecko_map.get(coin)
+
     print(f"   [INFO] Fetching 180 days of historical data for {coin}...")
     try:
         df = yf.download(
@@ -24,6 +59,7 @@ def fetch_data(coin: str) -> pd.DataFrame:
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
 
+        # --- Technical Indicators (Unchanged) ---
         print("   [INFO] Calculating technical indicators...")
         df['SMA'] = SMAIndicator(close=df['Close'], window=20).sma_indicator()
         df['EMA'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
@@ -42,19 +78,29 @@ def fetch_data(coin: str) -> pd.DataFrame:
         df['Ichimoku_a'] = ichimoku.ichimoku_a()
         df['Ichimoku_b'] = ichimoku.ichimoku_b()
 
-        print("   [INFO] Simulating on-chain indicators...")
-        df['Active_Addresses'] = np.random.randint(100000, 1000000, size=len(df))
-        df['Transaction_Volume'] = np.random.uniform(1e9, 5e10, size=len(df))
-        df['TVL'] = np.random.uniform(1e9, 5e11, size=len(df))
-        df['Realized_PnL'] = np.random.uniform(-1e8, 1e8, size=len(df))
-
-        print("   [INFO] Simulating fundamental indicators...")
-        df['Token_Utility'] = np.random.uniform(1, 10, size=len(df))
-        df['Adoption_Rate'] = np.random.uniform(1, 10, size=len(df))
-        df['Team_Score'] = np.random.uniform(1, 10, size=len(df))
-        df['Tokenomics_Score'] = np.random.uniform(1, 10, size=len(df))
-        df['Regulatory_Risk'] = np.random.uniform(1, 10, size=len(df))
-
+        # --- REPLACE SIMULATED DATA WITH REAL COINGECKO DATA ---
+        if coin_id:
+            cg_data = fetch_coingecko_data(coin_id)
+            if cg_data:
+                print("   [INFO] Integrating real on-chain and fundamental data...")
+                # On-Chain Proxies
+                df['Transaction_Volume_24h'] = cg_data.get('total_volume')
+                df['Circulating_Supply'] = cg_data.get('circulating_supply')
+                
+                # Fundamental Indicators
+                df['Market_Cap_Rank'] = cg_data.get('market_cap_rank')
+                df['Community_Score'] = cg_data.get('community_score')
+                df['Developer_Score'] = cg_data.get('developer_score')
+                df['Sentiment_Up_Percentage'] = cg_data.get('sentiment_up_percentage')
+            else:
+                # Fallback to zeros if API fails, instead of random data
+                df['Transaction_Volume_24h'] = 0
+                df['Circulating_Supply'] = 0
+                df['Market_Cap_Rank'] = 0
+                df['Community_Score'] = 0
+                df['Developer_Score'] = 0
+                df['Sentiment_Up_Percentage'] = 0
+        
         df.dropna(inplace=True)
         print(f"   [SUCCESS] Data processed for {coin}. Shape: {df.shape}")
         return df
