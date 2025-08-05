@@ -23,7 +23,10 @@ forecasts_table = Table('forecasts', metadata,
     Column('High_Forecast_5_Day', String),
     Column('analysis_summary', String),
     Column('analysis_hypothesis', String),
-    Column('analysis_news_links', String)
+    Column('analysis_news_links', String),
+    # --- NEW COLUMNS FOR FEEDBACK ---
+    Column('user_feedback', String),
+    Column('user_correction', String)
 )
 
 def init_db():
@@ -53,7 +56,7 @@ def save_forecast_results(results_df: pd.DataFrame):
 def load_forecast_results() -> pd.DataFrame:
     print("   [INFO] Loading forecast results from the database...")
     try:
-        query = text("SELECT * FROM forecasts ORDER BY \"Date\" DESC")
+        query = text("SELECT * FROM forecasts ORDER BY \"Date\" DESC, id DESC")
         with engine.connect() as connection:
             df = pd.read_sql_query(query, connection)
         print(f"   [SUCCESS] Loaded {len(df)} records from the database.")
@@ -61,3 +64,19 @@ def load_forecast_results() -> pd.DataFrame:
     except Exception as e:
         print(f"❌ [ERROR] Could not load results from database: {e}")
         return pd.DataFrame()
+
+def update_feedback(record_id: int, feedback: str, correction: str = ""):
+    """Updates a specific forecast record with user feedback."""
+    print(f"   [INFO] Updating feedback for record ID: {record_id}...")
+    try:
+        with engine.connect() as connection:
+            stmt = text(
+                "UPDATE forecasts SET user_feedback = :feedback, user_correction = :correction WHERE id = :id"
+            )
+            connection.execute(stmt, {"feedback": feedback, "correction": correction, "id": record_id})
+            connection.commit()
+        print("   [SUCCESS] Feedback updated in the database.")
+        return True
+    except Exception as e:
+        print(f"❌ [ERROR] Could not update feedback in database: {e}")
+        return False

@@ -76,7 +76,10 @@ def run_daily_analysis():
                 "High_Forecast_5_Day": json.dumps(high_forecasts_list, default=default_json_serializer),
                 "analysis_summary": analysis_results.get("summary"),
                 "analysis_hypothesis": analysis_results.get("hypothesis"),
-                "analysis_news_links": analysis_results.get("news_links")
+                "analysis_news_links": analysis_results.get("news_links"),
+                # --- ADD PLACEHOLDERS FOR NEW FEEDBACK COLUMNS ---
+                "user_feedback": None,
+                "user_correction": None
             }
             all_results.append(result)
 
