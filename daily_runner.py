@@ -9,12 +9,13 @@ from dotenv import load_dotenv
 
 # --- Load Environment and Keys ---
 load_dotenv()
-openai.api_key = os.getenv("REMOVED_OPENAI_KEY")
-news_api_key = os.getenv("REMOVED_NEWSAPI_KEY")
+# <--- CHANGE: Use standard environment variable names --->
+openai.api_key = os.getenv("OPENAI_API_KEY")
+news_api_key = os.getenv("NEWS_API_KEY")
 
 if not openai.api_key or not news_api_key:
-    print("❌ [FATAL] API keys not found.")
-    exit()
+    print("❌ [FATAL] OPENAI_API_KEY or NEWS_API_KEY not found in environment variables.")
+    exit(1) # Exit with a non-zero status code to ensure the script stops
 
 # --- Module Imports ---
 try:
@@ -24,7 +25,7 @@ try:
     from db_utils import init_db, save_forecast_results
 except ImportError as e:
     print(f"❌ [FATAL] Failed to import a required module: {e}. Exiting.")
-    exit()
+    exit(1)
 
 # --- Configuration ---
 COINS = {"BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "XRP-USD": "XRP"}
@@ -62,7 +63,6 @@ def run_daily_analysis():
             sentiment_score = get_news_sentiment(coin_ticker=ticker, coin_name=name, api_key=news_api_key)
             high_forecasts_list = prophet_forecast_highs(market_data.copy(), periods=5)
             
-            # <--- CHANGE: GET LATEST INDICATOR VALUES --->
             latest_rsi = market_data["RSI"].iloc[-1]
             latest_macd = market_data["MACD"].iloc[-1]
             
@@ -70,8 +70,8 @@ def run_daily_analysis():
                 "Date": today, "Coin": ticker, "Actual_Price": actual_price,
                 "Prophet_Forecast": prophet_price, "LSTM_Forecast": lstm_price,
                 "Sentiment_Score": sentiment_score,
-                "RSI": latest_rsi, # <--- CHANGE: ADD RSI TO RESULTS --->
-                "MACD": latest_macd, # <--- CHANGE: ADD MACD TO RESULTS --->
+                "RSI": latest_rsi,
+                "MACD": latest_macd,
                 "All_Time_High": all_time_high,
                 "High_Forecast_5_Day": json.dumps(high_forecasts_list, default=default_json_serializer)
             }
