@@ -3,6 +3,7 @@ from datetime import datetime
 import numpy as np
 import os
 import json
+import openai # <--- THIS LINE WAS MISSING
 from frozendict import frozendict
 from dotenv import load_dotenv
 
@@ -27,7 +28,7 @@ except ImportError as e:
 
 # --- Configuration ---
 COINS = {"BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "XRP-USD": "XRP"}
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data') # Still save detailed CSVs locally
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 # Helper function
 def default_json_serializer(obj):
@@ -39,13 +40,10 @@ def default_json_serializer(obj):
 
 def run_daily_analysis():
     print("✅ [START] Kicking off daily crypto forecasting run...")
-    # Initialize the database, create table if needed
     init_db()
-
     today = datetime.today().strftime("%Y-%m-%d")
     os.makedirs(DATA_DIR, exist_ok=True)
     all_results = []
-
     for ticker, name in COINS.items():
         print(f"\nProcessing {ticker} ({name})...")
         try:
@@ -53,19 +51,15 @@ def run_daily_analysis():
             if market_data.empty or len(market_data) < 61:
                 print(f"   [WARN] Insufficient data for {ticker}. Skipping.")
                 continue
-
-            # We still save detailed daily data locally for the dashboard to read
             detailed_data_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
             market_data.to_csv(detailed_data_path)
             print(f"   [INFO] Detailed daily data saved to {detailed_data_path}")
-
             all_time_high = market_data['High'].max()
             actual_price = market_data["Close"].iloc[-1]
             prophet_price = prophet_forecast(market_data.copy())
             lstm_price = lstm_forecast(market_data.copy())
             sentiment_score = get_news_sentiment(coin_ticker=ticker, coin_name=name, api_key=news_api_key)
             high_forecasts_list = prophet_forecast_highs(market_data.copy(), periods=5)
-            
             result = {
                 "Date": today, "Coin": ticker, "Actual_Price": actual_price,
                 "Prophet_Forecast": prophet_price, "LSTM_Forecast": lstm_price,
@@ -73,16 +67,13 @@ def run_daily_analysis():
                 "High_Forecast_5_Day": json.dumps(high_forecasts_list, default=default_json_serializer)
             }
             all_results.append(result)
-
         except Exception as e:
             print(f"❌ [ERROR] An unexpected error occurred while processing {ticker}: {e}")
             continue
-
     print("\n✅ [FINISH] Daily processing complete.")
-    
     if all_results:
         results_df = pd.DataFrame(all_results)
-        save_forecast_results(results_df) # Save to database
+        save_forecast_results(results_df)
     else:
         print("\n[WARN] No results were generated. Database not updated.")
 
