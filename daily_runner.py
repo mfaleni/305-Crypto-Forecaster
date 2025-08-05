@@ -7,12 +7,14 @@ import openai
 from frozendict import frozendict
 from dotenv import load_dotenv
 
-# --- Robust Path Configuration ---
+
+# --- Robust Local Path Configuration ---
 # Get the absolute path of the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Use Render's disk path if an environment variable is set, otherwise use the script's directory
-MOUNT_PATH = os.getenv("CRYPTO_DATA_PATH", SCRIPT_DIR)
-# ---------------------------------
+# Define file paths relative to the script's location
+RESULTS_FILE = os.path.join(SCRIPT_DIR, 'forecast_results.csv')
+DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
+# ------------------------------------
 
 # --- Load and set API Keys ---
 load_dotenv()
