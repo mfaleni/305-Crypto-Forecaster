@@ -3,27 +3,24 @@ import pandas as pd
 import os
 import json
 import numpy as np
+from db_utils import load_forecast_results
 
 # --- Page Configuration ---
 st.set_page_config(page_title="305 Crypto Forecast", page_icon="📈", layout="wide")
 
-# --- Robust Local Path Configuration ---
-# Get the absolute path of the directory where this script is located
+# --- Path Configuration for local daily data ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Define file paths relative to the script's location
-RESULTS_FILE = os.path.join(SCRIPT_DIR, 'forecast_results.csv')
 DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
-# ------------------------------------
 
-# --- Caching Functions for Performance ---
+# --- Caching Functions ---
 @st.cache_data(ttl=3600)
-def load_summary_data(file_path):
-    if not os.path.exists(file_path):
-        return None
-    return pd.read_csv(file_path)
+def get_historical_data():
+    """Loads all forecast data from the database."""
+    return load_forecast_results()
 
 @st.cache_data(ttl=3600)
 def load_chart_data(ticker):
+    """Loads the detailed indicator data from the local CSV file."""
     file_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
     if os.path.exists(file_path):
         try:
@@ -35,10 +32,18 @@ def load_chart_data(ticker):
 # --- Main Application ---
 st.title("📈 305 Crypto Forecast Dashboard")
 st.markdown("An automated forecasting and sentiment analysis system for major cryptocurrencies.")
-forecast_df = load_summary_data(RESULTS_FILE)
-if forecast_df is None:
-    st.error("🚨 Forecast data file not found. The daily analysis may not have run yet. Please check the deployment logs.")
+
+historical_df = get_historical_data()
+
+if historical_df.empty:
+    st.error("🚨 No forecast data found in the database. The daily analysis may not have run yet.")
     st.stop()
+
+# --- Data Preparation ---
+# Get the most recent forecast date
+latest_date = historical_df['Date'].max()
+# Filter for only the most recent results to display the "Today's Overview"
+latest_forecast_df = historical_df[historical_df['Date'] == latest_date].copy()
 
 # --- Utility Function ---
 def format_numeric_columns(df):
@@ -53,16 +58,18 @@ def format_numeric_columns(df):
     for col in numeric_cols:
         if col in formatted_df.columns:
             try:
-                formatted_df[col] = formatted_df[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) and np.issubdtype(type(x), np.number) else x)
+                # Apply formatting only to numeric types to avoid errors
+                formatted_df[col] = formatted_df[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) and isinstance(x, (int, float)) else x)
             except (ValueError, TypeError):
                 pass
     return formatted_df
 
 # --- Sidebar & Main Content ---
 st.sidebar.header("Dashboard Options")
-selected_coin = st.sidebar.selectbox("Select a Cryptocurrency", forecast_df['Coin'].unique())
+selected_coin = st.sidebar.selectbox("Select a Cryptocurrency", latest_forecast_df['Coin'].unique())
+
 chart_data = load_chart_data(selected_coin)
-coin_forecast = forecast_df[forecast_df['Coin'] == selected_coin].iloc[0]
+coin_forecast = latest_forecast_df[latest_forecast_df['Coin'] == selected_coin].iloc[0]
 
 # --- Main Page Layout ---
 st.header(f"Today's Overview for {selected_coin}")
@@ -86,7 +93,7 @@ with st.expander("❓ **Explain the Sentiment Score**"):
     )
 
 st.header("5-Day High Forecast vs. Historical Highs")
-if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']) and coin_forecast['High_Forecast_5_Day'] != 'N/A':
+if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']):
     historical_highs = chart_data[['High']].tail(5)
     historical_highs.index = historical_highs.index.strftime('%Y-%m-%d')
     try:
@@ -95,9 +102,9 @@ if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notn
             forecast_df_highs = pd.DataFrame(forecast_data)
             forecast_df_highs['ds'] = pd.to_datetime(forecast_df_highs['ds']).dt.strftime('%Y-%m-%d')
             forecast_df_highs = forecast_df_highs.rename(columns={'ds': 'Date', 'yhat': 'Forecasted High'}).set_index('Date')
-            combined_df = pd.concat([historical_highs, forecast_df_highs], axis=1)
+            combined_df = pd.concat([historical_highs, forecast_df_highs['Forecasted High']], axis=1)
             st.bar_chart(combined_df)
-            st.dataframe(format_numeric_columns(combined_df))
+            st.dataframe(format_numeric_columns(combined_df.reset_index()))
         else:
             st.warning("Forecast data is available but empty.")
     except (json.JSONDecodeError, TypeError) as e:
@@ -207,9 +214,9 @@ else:
 
 # --- Raw Data Section ---
 st.header("Raw Data Viewer")
-st.subheader("Forecast Summary Data")
-st.dataframe(format_numeric_columns(forecast_df))
-st.subheader(f"Full Indicator Data for {selected_coin}")
+st.subheader("Full Historical Forecast Data")
+st.dataframe(format_numeric_columns(historical_df))
+st.subheader(f"Full Daily Indicator Data for {selected_coin}")
 if chart_data is not None:
     st.dataframe(format_numeric_columns(chart_data))
 

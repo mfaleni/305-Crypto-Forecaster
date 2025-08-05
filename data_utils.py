@@ -1,91 +1,70 @@
+import os
 import pandas as pd
-import yfinance as yf
-from ta.momentum import RSIIndicator, StochasticOscillator
-from ta.trend import MACD, SMAIndicator, EMAIndicator, IchimokuIndicator
-from ta.volatility import BollingerBands
-from ta.volume import OnBalanceVolumeIndicator
-from ta.utils import dropna
-import numpy as np
+from sqlalchemy import create_engine, text, inspect, Table, Column, MetaData, Integer, String, Float, DateTime
 
-def fetch_data(coin: str) -> pd.DataFrame:
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise Exception("DATABASE_URL environment variable is not set.")
+
+engine = create_engine(DATABASE_URL)
+metadata = MetaData()
+
+# Define the structure of our forecasts table
+forecasts_table = Table('forecasts', metadata,
+    Column('id', Integer, primary_key=True, autoincrement=True),
+    Column('Date', DateTime, nullable=False),
+    Column('Coin', String, nullable=False),
+    Column('Actual_Price', Float),
+    Column('Prophet_Forecast', Float),
+    Column('LSTM_Forecast', Float),
+    Column('Sentiment_Score', Float),
+    Column('All_Time_High', Float),
+    Column('High_Forecast_5_Day', String) # Storing as a JSON string
+)
+
+def init_db():
     """
-    Fetches 180 days of historical cryptocurrency data and calculates a comprehensive
-    set of technical, on-chain, and fundamental indicators.
+    Initializes the database and creates the 'forecasts' table if it doesn't exist.
     """
-    print(f"   [INFO] Fetching 180 days of historical data for {coin}...")
+    print("   [INFO] Initializing database...")
     try:
-        # Download historical data
-        df = yf.download(
-            tickers=coin, period="180d", interval="1d", progress=False, auto_adjust=False
-        )
-
-        if df.empty:
-            print(f"   [WARN] No data found for {coin}.")
-            return pd.DataFrame()
-
-        # --- FIX for MultiIndex columns ---
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        # --- ✅ 1. Technical Indicators ---
-        print("   [INFO] Calculating technical indicators...")
-        # Simple Moving Average (SMA)
-        df['SMA'] = SMAIndicator(close=df['Close'], window=20).sma_indicator()
-        # Exponential Moving Average (EMA)
-        df['EMA'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
-        # Relative Strength Index (RSI)
-        df['RSI'] = RSIIndicator(close=df['Close']).rsi()
-        # Moving Average Convergence Divergence (MACD)
-        macd = MACD(close=df['Close'])
-        df['MACD'] = macd.macd()
-        df['MACD_Signal'] = macd.macd_signal()
-        # Bollinger Bands
-        bollinger = BollingerBands(close=df['Close'], window=20, window_dev=2)
-        df['BB_High'] = bollinger.bollinger_hband()
-        df['BB_Low'] = bollinger.bollinger_lband()
-        # Stochastic Oscillator
-        stoch = StochasticOscillator(high=df['High'], low=df['Low'], close=df['Close'])
-        df['Stoch_k'] = stoch.stoch()
-        df['Stoch_d'] = stoch.stoch_signal()
-        # On-Balance Volume (OBV)
-        df['OBV'] = OnBalanceVolumeIndicator(close=df['Close'], volume=df['Volume']).on_balance_volume()
-        # Ichimoku Cloud
-        ichimoku = IchimokuIndicator(high=df['High'], low=df['Low'])
-        df['Ichimoku_a'] = ichimoku.ichimoku_a()
-        df['Ichimoku_b'] = ichimoku.ichimoku_b()
-
-        # --- ✅ 2. On-Chain Indicators (Simulated) ---
-        print("   [INFO] Simulating on-chain indicators...")
-        df['Active_Addresses'] = np.random.randint(100000, 1000000, size=len(df))
-        df['Transaction_Volume'] = np.random.uniform(1e9, 5e10, size=len(df))
-        df['Supply_Distribution'] = np.random.rand(len(df))
-        df['TVL'] = np.random.uniform(1e9, 5e11, size=len(df))
-        df['Realized_PnL'] = np.random.uniform(-1e8, 1e8, size=len(df))
-
-        # --- ✅ 3. Fundamental Indicators (Simulated) ---
-        print("   [INFO] Simulating fundamental indicators...")
-        df['Token_Utility'] = np.random.uniform(1, 10, size=len(df))
-        df['Adoption_Rate'] = np.random.uniform(1, 10, size=len(df))
-        df['Team_Score'] = np.random.uniform(1, 10, size=len(df))
-        df['Tokenomics_Score'] = np.random.uniform(1, 10, size=len(df))
-        df['Regulatory_Risk'] = np.random.uniform(1, 10, size=len(df))
-
-        # --- Final Data Cleaning ---
-        df.dropna(inplace=True)
-
-        print(f"   [SUCCESS] Data processed for {coin}. Shape: {df.shape}")
-        return df
-
+        inspector = inspect(engine)
+        if not inspector.has_table('forecasts'):
+            print("   [INFO] 'forecasts' table not found. Creating table...")
+            metadata.create_all(engine)
+            print("   [SUCCESS] 'forecasts' table created.")
+        else:
+            print("   [INFO] 'forecasts' table already exists.")
     except Exception as e:
-        print(f"   [ERROR] An error occurred while processing data for {coin}: {e}")
-        return pd.DataFrame()
+        print(f"❌ [ERROR] Could not initialize database: {e}")
+        raise
 
-if __name__ == '__main__':
-    # This block allows for direct testing of this module
-    print("--- Testing data_utils.py ---")
-    
-    btc_data = fetch_data("BTC-USD")
-    if not btc_data.empty:
-        print("\nBTC-USD Data Head (Sample of new columns):")
-        print(btc_data[['Close', 'SMA', 'RSI', 'BB_High', 'Active_Addresses', 'Team_Score']].head())
-        print(f"\nTotal columns: {len(btc_data.columns)}")
+def save_forecast_results(results_df: pd.DataFrame):
+    """
+    Saves a DataFrame of forecast results to the database.
+    """
+    print("   [INFO] Saving forecast results to the database...")
+    try:
+        # Ensure the 'Date' column is in the correct format
+        results_df['Date'] = pd.to_datetime(results_df['Date'])
+        results_df.to_sql('forecasts', engine, if_exists='append', index=False)
+        print(f"   [SUCCESS] Saved {len(results_df)} new records to the database.")
+    except Exception as e:
+        print(f"❌ [ERROR] Could not save results to database: {e}")
+        raise
+
+def load_forecast_results() -> pd.DataFrame:
+    """
+    Loads all historical forecast results from the database.
+    """
+    print("   [INFO] Loading forecast results from the database...")
+    try:
+        # Load the entire table, sort by Date descending to get the latest results first
+        query = text("SELECT * FROM forecasts ORDER BY \"Date\" DESC")
+        with engine.connect() as connection:
+            df = pd.read_sql_query(query, connection)
+        print(f"   [SUCCESS] Loaded {len(df)} records from the database.")
+        return df
+    except Exception as e:
+        print(f"❌ [ERROR] Could not load results from database: {e}")
+        return pd.DataFrame() # Return empty DataFrame on failure
