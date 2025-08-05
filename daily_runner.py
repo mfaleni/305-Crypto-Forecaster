@@ -52,7 +52,9 @@ def run_daily_analysis():
             detailed_data_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
             market_data.to_csv(detailed_data_path)
             
-            all_time_high = market_data['High'].max()
+            # <--- CHANGE: USE THE REAL ATH FROM COINGECKO --->
+            all_time_high = market_data["All_Time_High_Real"].iloc[-1]
+
             actual_price = market_data["Close"].iloc[-1]
             prophet_price = prophet_forecast(market_data.copy())
             lstm_price = lstm_forecast(market_data.copy())
@@ -72,12 +74,11 @@ def run_daily_analysis():
                 "Date": today, "Coin": ticker, "Actual_Price": actual_price,
                 "Prophet_Forecast": prophet_price, "LSTM_Forecast": lstm_price,
                 "Sentiment_Score": sentiment_score, "RSI": latest_rsi, "MACD": latest_macd,
-                "All_Time_High": all_time_high,
+                "All_Time_High": all_time_high, # Now this is the real ATH
                 "High_Forecast_5_Day": json.dumps(high_forecasts_list, default=default_json_serializer),
                 "analysis_summary": analysis_results.get("summary"),
                 "analysis_hypothesis": analysis_results.get("hypothesis"),
                 "analysis_news_links": analysis_results.get("news_links"),
-                # --- ADD PLACEHOLDERS FOR NEW FEEDBACK COLUMNS ---
                 "user_feedback": None,
                 "user_correction": None
             }
