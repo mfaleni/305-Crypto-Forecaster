@@ -7,7 +7,6 @@ import openai
 from frozendict import frozendict
 from dotenv import load_dotenv
 
-
 # --- Robust Local Path Configuration ---
 # Get the absolute path of the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +14,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_FILE = os.path.join(SCRIPT_DIR, 'forecast_results.csv')
 DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
 # ------------------------------------
+
 
 # --- Load and set API Keys ---
 load_dotenv()

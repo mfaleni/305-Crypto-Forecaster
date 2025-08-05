@@ -7,7 +7,6 @@ import numpy as np
 # --- Page Configuration ---
 st.set_page_config(page_title="305 Crypto Forecast", page_icon="📈", layout="wide")
 
-
 # --- Robust Local Path Configuration ---
 # Get the absolute path of the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,10 +14,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_FILE = os.path.join(SCRIPT_DIR, 'forecast_results.csv')
 DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
 # ------------------------------------
-
-# --- File Paths ---
-RESULTS_FILE = os.path.join(MOUNT_PATH, 'forecast_results.csv')
-DATA_DIR = os.path.join(MOUNT_PATH, 'data')
 
 # --- Caching Functions for Performance ---
 @st.cache_data(ttl=3600)
