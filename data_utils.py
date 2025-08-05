@@ -2,7 +2,8 @@ import pandas as pd
 import yfinance as yf
 import requests
 from ta.momentum import RSIIndicator, StochasticOscillator
-from ta.trend import MACD, SMAIndicator, EMAIndicator, IchokuIndicator
+# --- THIS LINE IS NOW CORRECTED ---
+from ta.trend import MACD, SMAIndicator, EMAIndicator, IchimokuIndicator
 from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 import numpy as np
@@ -23,7 +24,6 @@ def fetch_coingecko_data(coin_id: str) -> dict:
             'sentiment_up_percentage': data.get('sentiment_votes_up_percentage', 0),
             'total_volume': data.get('market_data', {}).get('total_volume', {}).get('usd', 0),
             'circulating_supply': data.get('market_data', {}).get('circulating_supply', 0),
-            # <--- ADDED THIS LINE TO GET THE REAL ATH --->
             'ath_usd': data.get('market_data', {}).get('ath', {}).get('usd', 0)
         }
         print("   [SUCCESS] CoinGecko data fetched.")
@@ -52,7 +52,6 @@ def fetch_data(coin: str) -> pd.DataFrame:
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
 
-        # --- Technical Indicators ---
         print("   [INFO] Calculating technical indicators...")
         df['SMA'] = SMAIndicator(close=df['Close'], window=20).sma_indicator()
         df['EMA'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
@@ -71,7 +70,6 @@ def fetch_data(coin: str) -> pd.DataFrame:
         df['Ichimoku_a'] = ichimoku.ichimoku_a()
         df['Ichimoku_b'] = ichimoku.ichimoku_b()
 
-        # --- Integrate CoinGecko Data ---
         if coin_id:
             cg_data = fetch_coingecko_data(coin_id)
             if cg_data:
@@ -82,7 +80,6 @@ def fetch_data(coin: str) -> pd.DataFrame:
                 df['Community_Score'] = cg_data.get('community_score')
                 df['Developer_Score'] = cg_data.get('developer_score')
                 df['Sentiment_Up_Percentage'] = cg_data.get('sentiment_up_percentage')
-                # <--- ADDED THIS LINE TO STORE THE REAL ATH --->
                 df['All_Time_High_Real'] = cg_data.get('ath_usd')
         
         df.dropna(inplace=True)
