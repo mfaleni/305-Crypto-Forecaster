@@ -35,12 +35,9 @@ def load_chart_data(ticker):
 # --- Main Application ---
 st.title("📈 305 Crypto Forecast Dashboard")
 st.markdown("An automated forecasting and sentiment analysis system for major cryptocurrencies.")
-
-# --- Data Loading ---
 forecast_df = load_summary_data(RESULTS_FILE)
-
 if forecast_df is None:
-    st.error("🚨 Forecast data file not found. The daily analysis may not have run yet. Please trigger the Cron Job and refresh.")
+    st.error("🚨 Forecast data file not found. The daily analysis may not have run yet. Please check the deployment logs.")
     st.stop()
 
 # --- Utility Function ---
@@ -64,18 +61,15 @@ def format_numeric_columns(df):
 # --- Sidebar & Main Content ---
 st.sidebar.header("Dashboard Options")
 selected_coin = st.sidebar.selectbox("Select a Cryptocurrency", forecast_df['Coin'].unique())
-
 chart_data = load_chart_data(selected_coin)
 coin_forecast = forecast_df[forecast_df['Coin'] == selected_coin].iloc[0]
 
 # --- Main Page Layout ---
 st.header(f"Today's Overview for {selected_coin}")
 col1, col2, col3, col4 = st.columns(4)
-
 actual_price = pd.to_numeric(coin_forecast['Actual_Price'], errors='coerce')
 all_time_high = pd.to_numeric(coin_forecast['All_Time_High'], errors='coerce')
 sentiment_score = pd.to_numeric(coin_forecast['Sentiment_Score'], errors='coerce')
-
 col1.metric("Actual Price", f"${actual_price:,.2f}" if pd.notna(actual_price) else "N/A")
 col2.metric("All-Time High", f"${all_time_high:,.2f}" if pd.notna(all_time_high) else "N/A")
 col3.metric("Sentiment Score", f"{sentiment_score:.2f}" if pd.notna(sentiment_score) else "N/A")

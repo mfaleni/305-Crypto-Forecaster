@@ -7,14 +7,13 @@ import openai
 from frozendict import frozendict
 from dotenv import load_dotenv
 
-# --- Robust Local Path Configuration ---
+# --- Robust Path Configuration ---
 # Get the absolute path of the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Define file paths relative to the script's location
 RESULTS_FILE = os.path.join(SCRIPT_DIR, 'forecast_results.csv')
 DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
 # ------------------------------------
-
 
 # --- Load and set API Keys ---
 load_dotenv()
@@ -36,8 +35,6 @@ except ImportError as e:
 
 # --- Configuration ---
 COINS = {"BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "XRP-USD": "XRP"}
-RESULTS_FILE = os.path.join(MOUNT_PATH, 'forecast_results.csv')
-DATA_DIR = os.path.join(MOUNT_PATH, 'data')
 
 # Helper function to convert non-serializable objects
 def default_json_serializer(obj):
@@ -48,36 +45,26 @@ def default_json_serializer(obj):
     raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
 def run_daily_analysis():
-    """
-    Orchestrates the daily analysis with robust error handling and correct file paths.
-    """
     print("✅ [START] Kicking off daily crypto forecasting run...")
     today = datetime.today().strftime("%Y-%m-%d")
-    
     os.makedirs(DATA_DIR, exist_ok=True)
     all_results = []
-
     for ticker, name in COINS.items():
         print(f"\nProcessing {ticker} ({name})...")
-        
         try:
             market_data = fetch_data(ticker)
-            
             if market_data.empty or len(market_data) < 61:
                 print(f"   [WARN] Insufficient or no data returned for {ticker}. Skipping this coin.")
                 continue
-
             detailed_data_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
             market_data.to_csv(detailed_data_path)
             print(f"   [INFO] Detailed data saved to {detailed_data_path}")
-
             all_time_high = market_data['High'].max()
             actual_price = market_data["Close"].iloc[-1]
             prophet_price = prophet_forecast(market_data.copy())
             lstm_price = lstm_forecast(market_data.copy())
             sentiment_score = get_news_sentiment(coin_ticker=ticker, coin_name=name, api_key=news_api_key)
             high_forecasts_list = prophet_forecast_highs(market_data.copy(), periods=5)
-            
             result = {
                 "Date": today, "Coin": ticker, "Actual_Price": actual_price,
                 "Prophet_Forecast": prophet_price, "LSTM_Forecast": lstm_price,
@@ -85,7 +72,6 @@ def run_daily_analysis():
                 "High_Forecast_5_Day": json.dumps(high_forecasts_list, default=default_json_serializer)
             }
             all_results.append(result)
-
             print("\n--- 📈 Daily Report ---")
             print(f"Coin              : {ticker}")
             print(f"Actual Price      : ${actual_price:,.2f}")
@@ -94,13 +80,10 @@ def run_daily_analysis():
             print(f"LSTM Forecast     : ${lstm_price:,.2f}")
             print(f"Sentiment Score   : {sentiment_score:.2f}")
             print("-------------------------\n")
-
         except Exception as e:
             print(f"❌ [ERROR] An unexpected error occurred while processing {ticker}: {e}")
             continue
-
     print("\n✅ [FINISH] Daily crypto forecasting run complete.")
-    
     if all_results:
         results_df = pd.DataFrame(all_results)
         results_df.fillna('N/A', inplace=True)
