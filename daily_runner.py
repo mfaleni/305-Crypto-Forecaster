@@ -11,8 +11,8 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 news_api_key = os.getenv("NEWS_API_KEY")
 
-if not openai.api_key or not news_api_key:
-    print("❌ [FATAL] OPENAI_API_KEY or NEWS_API_KEY not found.")
+if not all([openai.api_key, news_api_key]):
+    print("❌ [FATAL] Required API keys (OpenAI, NewsAPI) not found.")
     exit(1)
 
 try:
@@ -29,10 +29,8 @@ COINS = {"BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "XRP-USD": "XRP"}
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 def default_json_serializer(obj):
-    if isinstance(obj, pd.Timestamp):
-        return obj.isoformat()
-    if isinstance(obj, frozendict):
-        return dict(obj)
+    if isinstance(obj, pd.Timestamp): return obj.isoformat()
+    if isinstance(obj, frozendict): return dict(obj)
     raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
 def run_daily_analysis():
@@ -52,38 +50,47 @@ def run_daily_analysis():
             detailed_data_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
             market_data.to_csv(detailed_data_path)
             
-            # <--- CHANGE: USE THE REAL ATH FROM COINGECKO --->
-            all_time_high = market_data["All_Time_High_Real"].iloc[-1]
-
-            actual_price = market_data["Close"].iloc[-1]
+            # Extract all latest data points
+            latest_data = market_data.iloc[-1]
+            all_time_high = latest_data.get("All_Time_High_Real")
+            actual_price = latest_data.get("Close")
+            
+            # Run forecasts and sentiment
             prophet_price = prophet_forecast(market_data.copy())
             lstm_price = lstm_forecast(market_data.copy())
             high_forecasts_list = prophet_forecast_highs(market_data.copy(), periods=5)
-            latest_rsi = market_data["RSI"].iloc[-1]
-            latest_macd = market_data["MACD"].iloc[-1]
             sentiment_score, top_headlines = get_news_sentiment(coin_ticker=ticker, coin_name=name, api_key=news_api_key)
 
+            # Prepare briefing for AI Analyst
             daily_briefing_data = {
                 "coin_name": name, "actual_price": actual_price, "prophet_forecast": prophet_price,
-                "sentiment_score": sentiment_score, "rsi": latest_rsi, "macd": latest_macd,
-                "top_headlines": top_headlines
+                "sentiment_score": sentiment_score, "rsi": latest_data.get("RSI"), "macd": latest_data.get("MACD"),
+                "funding_rate": latest_data.get("Funding_Rate"), "open_interest": latest_data.get("Open_Interest"),
+                "exchange_net_flow": latest_data.get("Exchange_Net_Flow"), "mvrv_ratio": latest_data.get("MVRV_Ratio"),
+                "social_dominance": latest_data.get("Social_Dominance"), "galaxy_score": latest_data.get("Galaxy_Score"),
+                "alt_rank": latest_data.get("Alt_Rank"), "top_headlines": top_headlines
             }
             analysis_results = get_daily_analysis(daily_briefing_data)
 
+            # Assemble final record for database
             result = {
                 "Date": today, "Coin": ticker, "Actual_Price": actual_price,
                 "Prophet_Forecast": prophet_price, "LSTM_Forecast": lstm_price,
-                "Sentiment_Score": sentiment_score, "RSI": latest_rsi, "MACD": latest_macd,
-                "All_Time_High": all_time_high, # Now this is the real ATH
+                "Sentiment_Score": sentiment_score, "RSI": latest_data.get("RSI"), "MACD": latest_data.get("MACD"),
+                "All_Time_High": all_time_high,
                 "High_Forecast_5_Day": json.dumps(high_forecasts_list, default=default_json_serializer),
+                "Funding_Rate": latest_data.get("Funding_Rate"), "Open_Interest": latest_data.get("Open_Interest"),
+                "Long_Short_Ratio": latest_data.get("Long_Short_Ratio"),
+                "Exchange_Net_Flow": latest_data.get("Exchange_Net_Flow"),
+                "MVRV_Ratio": latest_data.get("MVRV_Ratio"), "Social_Dominance": latest_data.get("Social_Dominance"),
+                "Daily_Active_Addresses": latest_data.get("Daily_Active_Addresses"),
+                "Galaxy_Score": latest_data.get("Galaxy_Score"), "Alt_Rank": latest_data.get("Alt_Rank"),
                 "analysis_summary": analysis_results.get("summary"),
                 "analysis_hypothesis": analysis_results.get("hypothesis"),
                 "analysis_news_links": analysis_results.get("news_links"),
-                "user_feedback": None,
-                "user_correction": None
+                "user_feedback": None, "user_correction": None
             }
             all_results.append(result)
-
         except Exception as e:
             print(f"❌ [ERROR] An unexpected error occurred while processing {ticker}: {e}")
             continue

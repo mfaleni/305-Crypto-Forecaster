@@ -21,10 +21,21 @@ forecasts_table = Table('forecasts', metadata,
     Column('MACD', Float),
     Column('All_Time_High', Float),
     Column('High_Forecast_5_Day', String),
+    # --- CoinGlass Futures Data ---
+    Column('Funding_Rate', Float),
+    Column('Open_Interest', Float),
+    Column('Long_Short_Ratio', Float),
+    # --- Santiment On-Chain/Social Data ---
+    Column('MVRV_Ratio', Float),
+    Column('Social_Dominance', Float),
+    Column('Daily_Active_Addresses', Float),
+    # --- LunarCrush Social Data ---
+    Column('Galaxy_Score', Float),
+    Column('Alt_Rank', Float),
+    # --- AI Analysis & Feedback ---
     Column('analysis_summary', String),
     Column('analysis_hypothesis', String),
     Column('analysis_news_links', String),
-    # --- NEW COLUMNS FOR FEEDBACK ---
     Column('user_feedback', String),
     Column('user_correction', String)
 )
@@ -66,7 +77,6 @@ def load_forecast_results() -> pd.DataFrame:
         return pd.DataFrame()
 
 def update_feedback(record_id: int, feedback: str, correction: str = ""):
-    """Updates a specific forecast record with user feedback."""
     print(f"   [INFO] Updating feedback for record ID: {record_id}...")
     try:
         with engine.connect() as connection:

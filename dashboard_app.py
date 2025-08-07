@@ -56,7 +56,9 @@ def format_numeric_columns(df):
         'BB_High', 'BB_Low', 'Stoch_k', 'Stoch_d', 'OBV',
         'Ichimoku_a', 'Ichimoku_b', 'Transaction_Volume_24h', 'Circulating_Supply',
         'Market_Cap_Rank', 'Community_Score', 'Developer_Score', 'Sentiment_Up_Percentage',
-        'Forecasted High'
+        'Forecasted High', 'Funding_Rate', 'Open_Interest', 'Long_Short_Ratio',
+        'MVRV_Ratio', 'Social_Dominance', 'Daily_Active_Addresses',
+        'Galaxy_Score', 'Alt_Rank'
     ]
     for col in numeric_cols:
         if col in formatted_df.columns:
@@ -75,7 +77,7 @@ coin_forecast = latest_forecast_df[latest_forecast_df['Coin'] == selected_coin].
 
 # --- Main Page Layout ---
 st.header(f"Today's Overview for {selected_coin}")
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3 = st.columns(3)
 actual_price = pd.to_numeric(coin_forecast['Actual_Price'], errors='coerce')
 all_time_high = pd.to_numeric(coin_forecast['All_Time_High'], errors='coerce')
 sentiment_score = pd.to_numeric(coin_forecast['Sentiment_Score'], errors='coerce')
@@ -128,7 +130,7 @@ with st.container(border=True):
     with col_confirm:
         if st.button("Confirm Analysis ✅", key=f"confirm_{record_id}"):
             if update_feedback(record_id, "Confirmed"):
-                st.toast("Feedback 'Confirmed' saved!", icon="🎉")
+                st.toast("Feedback 'Confirmed' saved!", icon="�")
                 st.rerun()
             else:
                 st.error("Failed to save feedback.")
@@ -148,6 +150,34 @@ with st.container(border=True):
                     st.rerun()
                 else:
                     st.error("Failed to save correction.")
+
+# --- NEW: Professional Data Section ---
+st.header("Professional Grade Market Indicators")
+with st.container(border=True):
+    st.subheader("Futures & Derivatives Data (from CoinGlass)")
+    cg_col1, cg_col2, cg_col3 = st.columns(3)
+    funding_rate = pd.to_numeric(coin_forecast.get('Funding_Rate'), errors='coerce')
+    open_interest = pd.to_numeric(coin_forecast.get('Open_Interest'), errors='coerce')
+    long_short_ratio = pd.to_numeric(coin_forecast.get('Long_Short_Ratio'), errors='coerce')
+    cg_col1.metric("Funding Rate", f"{funding_rate:.4f}%" if pd.notna(funding_rate) else "N/A")
+    cg_col2.metric("Open Interest", f"${open_interest:,.0f}" if pd.notna(open_interest) else "N/A")
+    cg_col3.metric("Long/Short Ratio", f"{long_short_ratio:.2f}" if pd.notna(long_short_ratio) else "N/A")
+
+    st.subheader("On-Chain & Social Metrics (from Santiment)")
+    san_col1, san_col2, san_col3 = st.columns(3)
+    mvrv = pd.to_numeric(coin_forecast.get('MVRV_Ratio'), errors='coerce')
+    social_dom = pd.to_numeric(coin_forecast.get('Social_Dominance'), errors='coerce')
+    daa = pd.to_numeric(coin_forecast.get('Daily_Active_Addresses'), errors='coerce')
+    san_col1.metric("MVRV Ratio", f"{mvrv:.2f}" if pd.notna(mvrv) else "N/A")
+    san_col2.metric("Social Dominance", f"{social_dom:.2f}%" if pd.notna(social_dom) else "N/A")
+    san_col3.metric("Daily Active Addresses", f"{daa:,.0f}" if pd.notna(daa) else "N/A")
+
+    st.subheader("Social Intelligence (from LunarCrush)")
+    lc_col1, lc_col2 = st.columns(2)
+    galaxy_score = pd.to_numeric(coin_forecast.get('Galaxy_Score'), errors='coerce')
+    alt_rank = pd.to_numeric(coin_forecast.get('Alt_Rank'), errors='coerce')
+    lc_col1.metric("Galaxy Score™", f"{galaxy_score:.1f}/100" if pd.notna(galaxy_score) else "N/A")
+    lc_col2.metric("AltRank™", f"#{alt_rank:.0f}" if pd.notna(alt_rank) else "N/A")
 
 st.header("5-Day High Forecast vs. Historical Highs")
 if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']):
@@ -280,3 +310,4 @@ if chart_data is not None:
 
 st.sidebar.markdown("---")
 st.sidebar.info("This is for educational purposes only and is not financial advice.")
+�
