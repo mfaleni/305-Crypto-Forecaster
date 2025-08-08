@@ -8,11 +8,12 @@ from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 import numpy as np
 from datetime import datetime, timedelta
-from lunarcrush import LunarCrush # Import the official LunarCrush library
+from lunarcrush import LunarCrush
 
 # --- API HELPER FUNCTIONS ---
 
 def fetch_coinglass_data(symbol: str) -> dict:
+    """Fetches futures data for a given symbol from the CoinGlass API."""
     print(f"   [INFO] Fetching futures data for {symbol} from CoinGlass...")
     headers = {'accept': 'application/json'}
     api_symbol = symbol.replace("-USD", "")
@@ -41,9 +42,7 @@ def fetch_coinglass_data(symbol: str) -> dict:
         return data
 
 def fetch_santiment_data(slug: str) -> dict:
-    """
-    Fetches on-chain/social data for a given slug directly from the Santiment GraphQL API.
-    """
+    """Fetches on-chain/social data for a given slug directly from the Santiment GraphQL API."""
     print(f"   [INFO] Fetching on-chain/social data for {slug} from Santiment...")
     api_key = os.getenv("SANTIMENT_API_KEY")
     if not api_key:
@@ -80,6 +79,7 @@ def fetch_santiment_data(slug: str) -> dict:
         return {}
 
 def fetch_lunarcrush_data(symbol: str) -> dict:
+    """Fetches social intelligence for a given symbol from the LunarCrush API."""
     print(f"   [INFO] Fetching social intelligence for {symbol} from LunarCrush...")
     api_key = os.getenv("LUNARCRUSH_API_KEY")
     if not api_key:
@@ -89,7 +89,6 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
     api_symbol = symbol.replace("-USD", "")
     try:
         client = LunarCrush(api_key)
-        # Use the correct method to get asset metadata
         assets = client.get_assets(symbol=api_symbol)
         data = assets.get('data', [{}])[0]
 
@@ -104,6 +103,7 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
         return {}
 
 def fetch_coingecko_data(coin_id: str) -> dict:
+    """Fetches fundamental and market data from the CoinGecko API."""
     print(f"   [INFO] Fetching CoinGecko data for {coin_id}...")
     api_key = os.getenv("COINGECKO_API_KEY")
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
@@ -114,7 +114,12 @@ def fetch_coingecko_data(coin_id: str) -> dict:
         data = response.json()
         metrics = {
             'market_cap_rank': data.get('market_cap_rank', 0),
-            'ath_usd': data.get('market_data', {}).get('ath', {}).get('usd', 0)
+            'ath_usd': data.get('market_data', {}).get('ath', {}).get('usd', 0),
+            'total_volume': data.get('market_data', {}).get('total_volume', {}).get('usd', 0),
+            'circulating_supply': data.get('market_data', {}).get('circulating_supply', 0),
+            'community_score': data.get('community_score', 0),
+            'developer_score': data.get('developer_score', 0),
+            'sentiment_up_percentage': data.get('sentiment_votes_up_percentage', 0)
         }
         print("   [SUCCESS] CoinGecko data fetched.")
         return metrics
@@ -123,6 +128,10 @@ def fetch_coingecko_data(coin_id: str) -> dict:
         return {}
 
 def fetch_data(coin: str) -> pd.DataFrame:
+    """
+    Fetches historical data, calculates technical indicators, and enriches
+    it with data from all integrated professional sources.
+    """
     coingecko_map = {"BTC-USD": "bitcoin", "ETH-USD": "ethereum", "XRP-USD": "ripple"}
     santiment_slug = coingecko_map.get(coin)
 
@@ -156,15 +165,25 @@ def fetch_data(coin: str) -> pd.DataFrame:
         # Add all data points to the DataFrame, ensuring fallbacks are numeric
         df['Market_Cap_Rank'] = cg_data.get('market_cap_rank', 0)
         df['All_Time_High_Real'] = cg_data.get('ath_usd', 0.0)
+        df['Transaction_Volume_24h'] = cg_data.get('total_volume', 0.0)
+        df['Circulating_Supply'] = cg_data.get('circulating_supply', 0.0)
+        df['Community_Score'] = cg_data.get('community_score', 0.0)
+        df['Developer_Score'] = cg_data.get('developer_score', 0.0)
+        df['Sentiment_Up_Percentage'] = cg_data.get('sentiment_up_percentage', 0.0)
+        
         df['Funding_Rate'] = futures_data.get('funding_rate', 0.0)
         df['Open_Interest'] = futures_data.get('open_interest', 0.0)
         df['Long_Short_Ratio'] = futures_data.get('long_short_ratio', 0.0)
+        
         df['MVRV_Ratio'] = santiment_data.get('mvrv_usd', 0.0)
         df['Social_Dominance'] = santiment_data.get('social_dominance', 0.0)
         df['Daily_Active_Addresses'] = santiment_data.get('daily_active_addresses', 0.0)
+        
         df['Galaxy_Score'] = lunar_data.get('galaxy_score', 0.0)
         df['Alt_Rank'] = lunar_data.get('alt_rank', 0)
-        df['Exchange_Net_Flow'] = 0.0 # Placeholder as we don't have a free source for this yet
+        
+        # We don't have a free Glassnode source for this, so we'll add a placeholder
+        df['Exchange_Net_Flow'] = 0.0
 
         df.dropna(inplace=True)
         print(f"   [SUCCESS] Data processing complete for {coin}.")
