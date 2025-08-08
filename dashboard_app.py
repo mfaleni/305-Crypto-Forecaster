@@ -130,7 +130,7 @@ with st.container(border=True):
     with col_confirm:
         if st.button("Confirm Analysis ✅", key=f"confirm_{record_id}"):
             if update_feedback(record_id, "Confirmed"):
-                st.toast("Feedback 'Confirmed' saved!", icon="�")
+                st.toast("Feedback 'Confirmed' saved!", icon="🎉")
                 st.rerun()
             else:
                 st.error("Failed to save feedback.")
@@ -151,7 +151,6 @@ with st.container(border=True):
                 else:
                     st.error("Failed to save correction.")
 
-# --- NEW: Professional Data Section ---
 st.header("Professional Grade Market Indicators")
 with st.container(border=True):
     st.subheader("Futures & Derivatives Data (from CoinGlass)")

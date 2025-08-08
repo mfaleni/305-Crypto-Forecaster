@@ -7,14 +7,28 @@ import openai
 from frozendict import frozendict
 from dotenv import load_dotenv
 
+# --- Load Environment and Keys ---
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 news_api_key = os.getenv("NEWS_API_KEY")
+# Also load the new keys
+santiment_api_key = os.getenv("SANTIMENT_API_KEY")
+lunarcrush_api_key = os.getenv("LUNARCRUSH_API_KEY")
+coingecko_api_key = os.getenv("COINGECKO_API_KEY") # Good practice to check all
 
-if not all([openai.api_key, news_api_key]):
-    print("❌ [FATAL] Required API keys (OpenAI, NewsAPI) not found.")
+# --- Robust Key Check ---
+required_keys = {
+    "OPENAI_API_KEY": openai.api_key,
+    "NEWS_API_KEY": news_api_key,
+    "SANTIMENT_API_KEY": santiment_api_key,
+    "LUNARCRUSH_API_KEY": lunarcrush_api_key
+}
+missing_keys = [key for key, value in required_keys.items() if not value]
+if missing_keys:
+    print(f"❌ [FATAL] The following required API keys are missing from your environment: {', '.join(missing_keys)}")
     exit(1)
 
+# --- Module Imports ---
 try:
     from data_utils import fetch_data
     from forecasting import prophet_forecast, lstm_forecast, prophet_forecast_highs
@@ -25,6 +39,7 @@ except ImportError as e:
     print(f"❌ [FATAL] Failed to import a required module: {e}. Exiting.")
     exit(1)
 
+# --- Configuration ---
 COINS = {"BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "XRP-USD": "XRP"}
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
@@ -52,13 +67,11 @@ def run_daily_analysis():
             
             latest_data = market_data.iloc[-1]
             
-            # Run forecasts and sentiment
             prophet_price = prophet_forecast(market_data.copy())
             lstm_price = lstm_forecast(market_data.copy())
             high_forecasts_list = prophet_forecast_highs(market_data.copy(), periods=5)
             sentiment_score, top_headlines = get_news_sentiment(coin_ticker=ticker, coin_name=name, api_key=news_api_key)
 
-            # Prepare briefing for AI Analyst, using .get() for safety
             daily_briefing_data = {
                 "coin_name": name, "actual_price": latest_data.get("Close", 0.0), "prophet_forecast": prophet_price,
                 "sentiment_score": sentiment_score, "rsi": latest_data.get("RSI", 0.0), "macd": latest_data.get("MACD", 0.0),
@@ -69,7 +82,6 @@ def run_daily_analysis():
             }
             analysis_results = get_daily_analysis(daily_briefing_data)
 
-            # Assemble final record for database, using .get() for safety
             result = {
                 "Date": today, "Coin": ticker, "Actual_Price": latest_data.get("Close", 0.0),
                 "Prophet_Forecast": prophet_price, "LSTM_Forecast": lstm_price,
