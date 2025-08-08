@@ -5,6 +5,7 @@
 # Docker files
 Dockerfile
 .dockerignore
+docker-compose.yml
 
 # Virtual environment
 venv/

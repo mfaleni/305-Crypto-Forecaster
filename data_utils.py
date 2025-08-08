@@ -8,7 +8,10 @@ from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 import numpy as np
 from datetime import datetime, timedelta
-import sanpy # We will use the official sanpy library
+import sanpy # Import the official sanpy library
+from lunarcrush import LunarCrush # Import the official LunarCrush library
+
+# --- API HELPER FUNCTIONS ---
 
 def fetch_coinglass_data(symbol: str) -> dict:
     print(f"   [INFO] Fetching futures data for {symbol} from CoinGlass...")
@@ -71,14 +74,11 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
         return {}
     
     api_symbol = symbol.replace("-USD", "")
-    # Use the correct V2 API endpoint with the key in the header
-    url = f"https://api.lunarcrush.com/v2?data=assets&key={api_key}&symbol={api_symbol}"
-    
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json().get('data', [{}])[0]
-        
+        client = LunarCrush(api_key)
+        assets = client.get_assets(symbol=api_symbol)
+        data = assets.get('data', [{}])[0]
+
         metrics = {
             'galaxy_score': data.get('galaxy_score', 0.0),
             'alt_rank': data.get('alt_rank', 0)
@@ -150,8 +150,7 @@ def fetch_data(coin: str) -> pd.DataFrame:
         df['Daily_Active_Addresses'] = santiment_data.get('daily_active_addresses', 0.0)
         df['Galaxy_Score'] = lunar_data.get('galaxy_score', 0.0)
         df['Alt_Rank'] = lunar_data.get('alt_rank', 0)
-        # We don't have a free Glassnode source for this, so we'll add a placeholder
-        df['Exchange_Net_Flow'] = 0.0
+        df['Exchange_Net_Flow'] = 0.0 # Placeholder as we don't have a free source for this yet
 
         df.dropna(inplace=True)
         print(f"   [SUCCESS] Data processing complete for {coin}.")
