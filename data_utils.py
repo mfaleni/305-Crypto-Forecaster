@@ -8,7 +8,6 @@ from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 import numpy as np
 from datetime import datetime, timedelta
-import sanpy # Import the official sanpy library
 from lunarcrush import LunarCrush # Import the official LunarCrush library
 
 # --- API HELPER FUNCTIONS ---
@@ -42,23 +41,37 @@ def fetch_coinglass_data(symbol: str) -> dict:
         return data
 
 def fetch_santiment_data(slug: str) -> dict:
+    """
+    Fetches on-chain/social data for a given slug directly from the Santiment GraphQL API.
+    """
     print(f"   [INFO] Fetching on-chain/social data for {slug} from Santiment...")
     api_key = os.getenv("SANTIMENT_API_KEY")
     if not api_key:
         print("   [WARN] SANTIMENT_API_KEY not found. Skipping.")
         return {}
     
-    sanpy.ApiConfig.api_key = api_key
-    
+    query = f"""
+    query {{
+      mvrv: getMetric(metric: "mvrv_usd") {{
+        timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }}
+      }}
+      social_dominance: getMetric(metric: "social_dominance_total") {{
+        timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }}
+      }}
+      daa: getMetric(metric: "daily_active_addresses") {{
+        timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }}
+      }}
+    }}
+    """
     try:
-        mvrv_data = sanpy.get(f"mvrv_usd/{slug}", from_date="utc_now-2d", to_date="utc_now", interval="1d")
-        social_dom_data = sanpy.get(f"social_dominance_total/{slug}", from_date="utc_now-2d", to_date="utc_now", interval="1d")
-        daa_data = sanpy.get(f"daily_active_addresses/{slug}", from_date="utc_now-2d", to_date="utc_now", interval="1d")
-
+        response = requests.post('https://api.santiment.net/graphql', json={'query': query}, headers={'Authorization': f'Apikey {api_key}'})
+        response.raise_for_status()
+        data = response.json().get('data', {})
+        
         metrics = {
-            'mvrv_usd': mvrv_data.iloc[-1]['value'] if not mvrv_data.empty else 0.0,
-            'social_dominance': social_dom_data.iloc[-1]['value'] if not social_dom_data.empty else 0.0,
-            'daily_active_addresses': daa_data.iloc[-1]['value'] if not daa_data.empty else 0.0
+            'mvrv_usd': data.get('mvrv', {}).get('timeseriesData', [{}])[-1].get('value', 0.0),
+            'social_dominance': data.get('social_dominance', {}).get('timeseriesData', [{}])[-1].get('value', 0.0),
+            'daily_active_addresses': data.get('daa', {}).get('timeseriesData', [{}])[-1].get('value', 0.0)
         }
         print("   [SUCCESS] Santiment data fetched.")
         return metrics
@@ -76,6 +89,7 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
     api_symbol = symbol.replace("-USD", "")
     try:
         client = LunarCrush(api_key)
+        # Use the correct method to get asset metadata
         assets = client.get_assets(symbol=api_symbol)
         data = assets.get('data', [{}])[0]
 

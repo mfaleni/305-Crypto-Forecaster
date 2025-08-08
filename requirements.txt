@@ -105,5 +105,4 @@ yfinance==0.2.65
 SQLAlchemy
 psycopg[binary]
 psycopg2-binary
-# --- NEW LIBRARIES ---
 lunarcrush
