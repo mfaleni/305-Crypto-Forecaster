@@ -8,7 +8,6 @@ from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 import numpy as np
 from datetime import datetime, timedelta
-from lunarcrush import LunarCrush
 
 # --- API HELPER FUNCTIONS ---
 
@@ -67,10 +66,15 @@ def fetch_santiment_data(slug: str) -> dict:
         response.raise_for_status()
         data = response.json().get('data', {})
         
+        # More robust data extraction
+        mvrv_data = data.get('mvrv', {}).get('timeseriesData', [])
+        social_data = data.get('social_dominance', {}).get('timeseriesData', [])
+        daa_data = data.get('daa', {}).get('timeseriesData', [])
+
         metrics = {
-            'mvrv_usd': data.get('mvrv', {}).get('timeseriesData', [{}])[-1].get('value', 0.0),
-            'social_dominance': data.get('social_dominance', {}).get('timeseriesData', [{}])[-1].get('value', 0.0),
-            'daily_active_addresses': data.get('daa', {}).get('timeseriesData', [{}])[-1].get('value', 0.0)
+            'mvrv_usd': mvrv_data[-1]['value'] if mvrv_data else 0.0,
+            'social_dominance': social_data[-1]['value'] if social_data else 0.0,
+            'daily_active_addresses': daa_data[-1]['value'] if daa_data else 0.0
         }
         print("   [SUCCESS] Santiment data fetched.")
         return metrics
@@ -79,7 +83,7 @@ def fetch_santiment_data(slug: str) -> dict:
         return {}
 
 def fetch_lunarcrush_data(symbol: str) -> dict:
-    """Fetches social intelligence for a given symbol from the LunarCrush API."""
+    """Fetches social intelligence for a given symbol directly from the LunarCrush API v3."""
     print(f"   [INFO] Fetching social intelligence for {symbol} from LunarCrush...")
     api_key = os.getenv("LUNARCRUSH_API_KEY")
     if not api_key:
@@ -87,11 +91,14 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
         return {}
     
     api_symbol = symbol.replace("-USD", "")
+    url = f"https://lunarcrush.com/api3/coins/{api_symbol}/meta"
+    headers = {'Authorization': f'Bearer {api_key}'}
+    
     try:
-        client = LunarCrush(api_key)
-        assets = client.get_assets(symbol=api_symbol)
-        data = assets.get('data', [{}])[0]
-
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json().get('data', {})
+        
         metrics = {
             'galaxy_score': data.get('galaxy_score', 0.0),
             'alt_rank': data.get('alt_rank', 0)
