@@ -8,8 +8,7 @@ from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 import numpy as np
 from datetime import datetime, timedelta
-
-# --- API HELPER FUNCTIONS ---
+import sanpy # We will use the official sanpy library
 
 def fetch_coinglass_data(symbol: str) -> dict:
     print(f"   [INFO] Fetching futures data for {symbol} from CoinGlass...")
@@ -36,7 +35,7 @@ def fetch_coinglass_data(symbol: str) -> dict:
         print("   [SUCCESS] Futures data fetched.")
         return data
     except Exception as e:
-        print(f"   [WARN] Could not fetch futures data: {e}")
+        print(f"   [WARN] Could not fetch CoinGlass data: {e}")
         return data
 
 def fetch_santiment_data(slug: str) -> dict:
@@ -46,29 +45,17 @@ def fetch_santiment_data(slug: str) -> dict:
         print("   [WARN] SANTIMENT_API_KEY not found. Skipping.")
         return {}
     
-    # GraphQL query to get multiple metrics in one call
-    query = f"""
-    {{
-      getMetric(metric: "mvrv_usd") {{
-        timeseriesData(slug: "{slug}", from: "utc_now-1d", to: "utc_now", interval: "1d") {{ value }}
-      }}
-      getMetric(metric: "social_dominance_total") {{
-        timeseriesData(slug: "{slug}", from: "utc_now-1d", to: "utc_now", interval: "1d") {{ value }}
-      }}
-      getMetric(metric: "daily_active_addresses") {{
-        timeseriesData(slug: "{slug}", from: "utc_now-1d", to: "utc_now", interval: "1d") {{ value }}
-      }}
-    }}
-    """
+    sanpy.ApiConfig.api_key = api_key
+    
     try:
-        response = requests.post('https://api.santiment.net/graphql', json={'query': query}, headers={'Authorization': f'Apikey {api_key}'})
-        response.raise_for_status()
-        data = response.json().get('data', {})
-        
+        mvrv_data = sanpy.get(f"mvrv_usd/{slug}", from_date="utc_now-2d", to_date="utc_now", interval="1d")
+        social_dom_data = sanpy.get(f"social_dominance_total/{slug}", from_date="utc_now-2d", to_date="utc_now", interval="1d")
+        daa_data = sanpy.get(f"daily_active_addresses/{slug}", from_date="utc_now-2d", to_date="utc_now", interval="1d")
+
         metrics = {
-            'mvrv_usd': data.get('getMetric', {}).get('timeseriesData', [{}])[0].get('value', 0.0),
-            'social_dominance': data.get('getMetric', {}).get('timeseriesData', [{}])[0].get('value', 0.0),
-            'daily_active_addresses': data.get('getMetric', {}).get('timeseriesData', [{}])[0].get('value', 0.0)
+            'mvrv_usd': mvrv_data.iloc[-1]['value'] if not mvrv_data.empty else 0.0,
+            'social_dominance': social_dom_data.iloc[-1]['value'] if not social_dom_data.empty else 0.0,
+            'daily_active_addresses': daa_data.iloc[-1]['value'] if not daa_data.empty else 0.0
         }
         print("   [SUCCESS] Santiment data fetched.")
         return metrics
@@ -84,13 +71,13 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
         return {}
     
     api_symbol = symbol.replace("-USD", "")
-    url = f"https://lunarcrush.com/api3/coins/{api_symbol}/meta"
-    headers = {'Authorization': f'Bearer {api_key}'}
+    # Use the correct V2 API endpoint with the key in the header
+    url = f"https://api.lunarcrush.com/v2?data=assets&key={api_key}&symbol={api_symbol}"
     
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url)
         response.raise_for_status()
-        data = response.json().get('data', {})
+        data = response.json().get('data', [{}])[0]
         
         metrics = {
             'galaxy_score': data.get('galaxy_score', 0.0),
@@ -103,14 +90,25 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
         return {}
 
 def fetch_coingecko_data(coin_id: str) -> dict:
-    # This function remains unchanged
-    pass
+    print(f"   [INFO] Fetching CoinGecko data for {coin_id}...")
+    api_key = os.getenv("COINGECKO_API_KEY")
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+    params = {'x_cg_demo_api_key': api_key}
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        metrics = {
+            'market_cap_rank': data.get('market_cap_rank', 0),
+            'ath_usd': data.get('market_data', {}).get('ath', {}).get('usd', 0)
+        }
+        print("   [SUCCESS] CoinGecko data fetched.")
+        return metrics
+    except requests.exceptions.RequestException as e:
+        print(f"   [WARN] Could not fetch CoinGecko data for {coin_id}: {e}")
+        return {}
 
 def fetch_data(coin: str) -> pd.DataFrame:
-    """
-    Fetches historical data, calculates technical indicators, and enriches
-    it with data from all integrated professional sources.
-    """
     coingecko_map = {"BTC-USD": "bitcoin", "ETH-USD": "ethereum", "XRP-USD": "ripple"}
     santiment_slug = coingecko_map.get(coin)
 
@@ -120,7 +118,7 @@ def fetch_data(coin: str) -> pd.DataFrame:
         if df.empty: return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
-        # Technical Indicators (Unchanged)
+        # Technical Indicators
         print("   [INFO] Calculating technical indicators...")
         df['SMA'] = SMAIndicator(close=df['Close'], window=20).sma_indicator()
         df['EMA'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
@@ -135,28 +133,26 @@ def fetch_data(coin: str) -> pd.DataFrame:
         ichimoku = IchimokuIndicator(high=df['High'], low=df['Low'])
         df['Ichimoku_a'] = ichimoku.ichimoku_a(); df['Ichimoku_b'] = ichimoku.ichimoku_b()
 
-        # --- Integrate ALL Advanced Data Sources ---
+        # Integrate ALL Advanced Data Sources
         cg_data = fetch_coingecko_data(santiment_slug)
         futures_data = fetch_coinglass_data(coin)
         santiment_data = fetch_santiment_data(santiment_slug)
         lunar_data = fetch_lunarcrush_data(coin)
         
-        # Add all data points to the DataFrame
-        if cg_data:
-            df['Market_Cap_Rank'] = cg_data.get('market_cap_rank')
-            df['All_Time_High_Real'] = cg_data.get('ath_usd')
-        if futures_data:
-            df['Funding_Rate'] = futures_data.get('funding_rate')
-            df['Open_Interest'] = futures_data.get('open_interest')
-            df['Long_Short_Ratio'] = futures_data.get('long_short_ratio')
-        if santiment_data:
-            df['MVRV_Ratio'] = santiment_data.get('mvrv_usd')
-            df['Social_Dominance'] = santiment_data.get('social_dominance')
-            df['Daily_Active_Addresses'] = santiment_data.get('daily_active_addresses')
-        if lunar_data:
-            df['Galaxy_Score'] = lunar_data.get('galaxy_score')
-            df['Alt_Rank'] = lunar_data.get('alt_rank')
-        
+        # Add all data points to the DataFrame, ensuring fallbacks are numeric
+        df['Market_Cap_Rank'] = cg_data.get('market_cap_rank', 0)
+        df['All_Time_High_Real'] = cg_data.get('ath_usd', 0.0)
+        df['Funding_Rate'] = futures_data.get('funding_rate', 0.0)
+        df['Open_Interest'] = futures_data.get('open_interest', 0.0)
+        df['Long_Short_Ratio'] = futures_data.get('long_short_ratio', 0.0)
+        df['MVRV_Ratio'] = santiment_data.get('mvrv_usd', 0.0)
+        df['Social_Dominance'] = santiment_data.get('social_dominance', 0.0)
+        df['Daily_Active_Addresses'] = santiment_data.get('daily_active_addresses', 0.0)
+        df['Galaxy_Score'] = lunar_data.get('galaxy_score', 0.0)
+        df['Alt_Rank'] = lunar_data.get('alt_rank', 0)
+        # We don't have a free Glassnode source for this, so we'll add a placeholder
+        df['Exchange_Net_Flow'] = 0.0
+
         df.dropna(inplace=True)
         print(f"   [SUCCESS] Data processing complete for {coin}.")
         return df

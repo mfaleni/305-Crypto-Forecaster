@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    image: crypto-forecaster
+    env_file:
+      - .env
+      

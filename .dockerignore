@@ -1,0 +1,22 @@
+# Git files
+.git
+.gitignore
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# Virtual environment
+venv/
+
+# Local secrets and data
+.env
+data/
+forecast_results.csv
+
+# macOS specific files
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc

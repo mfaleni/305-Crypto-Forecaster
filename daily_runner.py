@@ -50,10 +50,7 @@ def run_daily_analysis():
             detailed_data_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
             market_data.to_csv(detailed_data_path)
             
-            # Extract all latest data points
             latest_data = market_data.iloc[-1]
-            all_time_high = latest_data.get("All_Time_High_Real")
-            actual_price = latest_data.get("Close")
             
             # Run forecasts and sentiment
             prophet_price = prophet_forecast(market_data.copy())
@@ -61,30 +58,30 @@ def run_daily_analysis():
             high_forecasts_list = prophet_forecast_highs(market_data.copy(), periods=5)
             sentiment_score, top_headlines = get_news_sentiment(coin_ticker=ticker, coin_name=name, api_key=news_api_key)
 
-            # Prepare briefing for AI Analyst
+            # Prepare briefing for AI Analyst, using .get() for safety
             daily_briefing_data = {
-                "coin_name": name, "actual_price": actual_price, "prophet_forecast": prophet_price,
-                "sentiment_score": sentiment_score, "rsi": latest_data.get("RSI"), "macd": latest_data.get("MACD"),
-                "funding_rate": latest_data.get("Funding_Rate"), "open_interest": latest_data.get("Open_Interest"),
-                "exchange_net_flow": latest_data.get("Exchange_Net_Flow"), "mvrv_ratio": latest_data.get("MVRV_Ratio"),
-                "social_dominance": latest_data.get("Social_Dominance"), "galaxy_score": latest_data.get("Galaxy_Score"),
-                "alt_rank": latest_data.get("Alt_Rank"), "top_headlines": top_headlines
+                "coin_name": name, "actual_price": latest_data.get("Close", 0.0), "prophet_forecast": prophet_price,
+                "sentiment_score": sentiment_score, "rsi": latest_data.get("RSI", 0.0), "macd": latest_data.get("MACD", 0.0),
+                "funding_rate": latest_data.get("Funding_Rate", 0.0), "open_interest": latest_data.get("Open_Interest", 0.0),
+                "mvrv_ratio": latest_data.get("MVRV_Ratio", 0.0), "social_dominance": latest_data.get("Social_Dominance", 0.0), 
+                "galaxy_score": latest_data.get("Galaxy_Score", 0.0), "alt_rank": latest_data.get("Alt_Rank", 0),
+                "top_headlines": top_headlines
             }
             analysis_results = get_daily_analysis(daily_briefing_data)
 
-            # Assemble final record for database
+            # Assemble final record for database, using .get() for safety
             result = {
-                "Date": today, "Coin": ticker, "Actual_Price": actual_price,
+                "Date": today, "Coin": ticker, "Actual_Price": latest_data.get("Close", 0.0),
                 "Prophet_Forecast": prophet_price, "LSTM_Forecast": lstm_price,
-                "Sentiment_Score": sentiment_score, "RSI": latest_data.get("RSI"), "MACD": latest_data.get("MACD"),
-                "All_Time_High": all_time_high,
+                "Sentiment_Score": sentiment_score, "RSI": latest_data.get("RSI", 0.0), "MACD": latest_data.get("MACD", 0.0),
+                "All_Time_High": latest_data.get("All_Time_High_Real", 0.0),
                 "High_Forecast_5_Day": json.dumps(high_forecasts_list, default=default_json_serializer),
-                "Funding_Rate": latest_data.get("Funding_Rate"), "Open_Interest": latest_data.get("Open_Interest"),
-                "Long_Short_Ratio": latest_data.get("Long_Short_Ratio"),
-                "Exchange_Net_Flow": latest_data.get("Exchange_Net_Flow"),
-                "MVRV_Ratio": latest_data.get("MVRV_Ratio"), "Social_Dominance": latest_data.get("Social_Dominance"),
-                "Daily_Active_Addresses": latest_data.get("Daily_Active_Addresses"),
-                "Galaxy_Score": latest_data.get("Galaxy_Score"), "Alt_Rank": latest_data.get("Alt_Rank"),
+                "Funding_Rate": latest_data.get("Funding_Rate", 0.0), "Open_Interest": latest_data.get("Open_Interest", 0.0),
+                "Long_Short_Ratio": latest_data.get("Long_Short_Ratio", 0.0),
+                "Exchange_Net_Flow": latest_data.get("Exchange_Net_Flow", 0.0),
+                "MVRV_Ratio": latest_data.get("MVRV_Ratio", 0.0), "Social_Dominance": latest_data.get("Social_Dominance", 0.0),
+                "Daily_Active_Addresses": latest_data.get("Daily_Active_Addresses", 0.0),
+                "Galaxy_Score": latest_data.get("Galaxy_Score", 0.0), "Alt_Rank": latest_data.get("Alt_Rank", 0.0),
                 "analysis_summary": analysis_results.get("summary"),
                 "analysis_hypothesis": analysis_results.get("hypothesis"),
                 "analysis_news_links": analysis_results.get("news_links"),
