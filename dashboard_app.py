@@ -310,4 +310,3 @@ if chart_data is not None:
 
 st.sidebar.markdown("---")
 st.sidebar.info("This is for educational purposes only and is not financial advice.")
-�
