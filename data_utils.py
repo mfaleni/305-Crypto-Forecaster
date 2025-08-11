@@ -66,7 +66,6 @@ def fetch_santiment_data(slug: str) -> dict:
         response.raise_for_status()
         data = response.json().get('data', {})
         
-        # More robust data extraction
         mvrv_data = data.get('mvrv', {}).get('timeseriesData', [])
         social_data = data.get('social_dominance', {}).get('timeseriesData', [])
         daa_data = data.get('daa', {}).get('timeseriesData', [])
@@ -83,7 +82,7 @@ def fetch_santiment_data(slug: str) -> dict:
         return {}
 
 def fetch_lunarcrush_data(symbol: str) -> dict:
-    """Fetches social intelligence for a given symbol directly from the LunarCrush API v3."""
+    """Fetches social intelligence for a given symbol directly from the LunarCrush API v4."""
     print(f"   [INFO] Fetching social intelligence for {symbol} from LunarCrush...")
     api_key = os.getenv("LUNARCRUSH_API_KEY")
     if not api_key:
@@ -91,7 +90,8 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
         return {}
     
     api_symbol = symbol.replace("-USD", "")
-    url = f"https://lunarcrush.com/api3/coins/{api_symbol}/meta"
+    # --- THIS IS THE CORRECTED V4 URL ---
+    url = f"https://lunarcrush.com/api4/public/coins/{api_symbol}/v1"
     headers = {'Authorization': f'Bearer {api_key}'}
     
     try:

@@ -1,13 +1,12 @@
+from dotenv import load_dotenv
+load_dotenv() # Load variables from .env file FIRST
+
 import streamlit as st
 import pandas as pd
 import os
 import json
 import numpy as np
-from dotenv import load_dotenv
 from db_utils import load_forecast_results, update_feedback
-
-# Load environment variables from .env file for local testing
-load_dotenv()
 
 # --- Page Configuration ---
 st.set_page_config(page_title="305 Crypto Forecast", page_icon="📈", layout="wide")
