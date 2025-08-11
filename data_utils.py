@@ -90,7 +90,6 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
         return {}
     
     api_symbol = symbol.replace("-USD", "")
-    # --- THIS IS THE CORRECTED V4 URL ---
     url = f"https://lunarcrush.com/api4/public/coins/{api_symbol}/v1"
     headers = {'Authorization': f'Bearer {api_key}'}
     
