@@ -8,8 +8,64 @@ from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 import numpy as np
 from datetime import datetime, timedelta
+import pandas as pd
+import requests # Make sure 'requests' is imported
+import time
 
 # --- API HELPER FUNCTIONS ---
+
+def get_exchange_netflow(symbol):
+    """
+    Fetches the daily exchange netflow for a given crypto asset.
+    
+    A negative value indicates net outflows (accumulation).
+    A positive value indicates net inflows (potential selling).
+
+    Args:
+        symbol (str): The cryptocurrency symbol (e.g., 'BTC', 'ETH').
+
+    Returns:
+        pd.DataFrame: A DataFrame with 'date' and 'netflow_usd' columns, or None if failed.
+    """
+    # We use a public API from Blockchain.com for this example.
+    # Note: Symbol must be lowercase for this specific API endpoint.
+    url = f"https://api.blockchain.com/v3/exchange/metrics/exchange-net-flow?asset={symbol.lower()}"
+    
+    print(f"   [INFO] Fetching exchange netflow data for {symbol}...")
+    
+    try:
+        response = requests.get(url)
+        
+        # Check if the request was successful
+        if response.status_code != 200:
+            print(f"   [WARNING] Failed to fetch netflow data for {symbol}. Status code: {response.status_code}")
+            return None
+            
+        data = response.json()
+        
+        # Convert the list of dictionaries into a DataFrame
+        df = pd.DataFrame(data)
+        
+        if df.empty:
+            print(f"   [WARNING] Netflow data for {symbol} is empty.")
+            return None
+
+        # The timestamp is in microseconds; convert to datetime objects
+        df['date'] = pd.to_datetime(df['timestamp'] / 1000, unit='s').dt.date
+        
+        # Select and rename columns for clarity and consistency
+        df = df[['date', 'value_usd']]
+        df = df.rename(columns={'value_usd': 'netflow_usd'})
+        
+        # Convert date to datetime64[ns] to ensure it can be merged later
+        df['date'] = pd.to_datetime(df['date'])
+
+        print(f"   [SUCCESS] Successfully fetched exchange netflow data for {symbol}.")
+        return df
+
+    except requests.exceptions.RequestException as e:
+        print(f"   [ERROR] An error occurred while fetching netflow data: {e}")
+        return None
 
 def fetch_coinglass_data(symbol: str) -> dict:
     """Fetches futures data for a given symbol from the CoinGlass API."""

@@ -1,79 +1,91 @@
+# analyst.py
+
 import os
 import json
 import openai
 
+# --- Ensure OpenAI client is configured ---
+# This setup assumes the API key is loaded from the .env file in daily_runner.py
+try:
+    client = openai.OpenAI()
+except openai.OpenAIError:
+    print("❌ [FATAL] OpenAI API key not configured. Please check your .env file.")
+    client = None
+
 def get_daily_analysis(daily_briefing_data: dict) -> dict:
     """
-    Takes a dictionary of the day's data, sends it to the GPT-4 API for analysis,
-    and returns a structured JSON response with validated URLs.
+    Takes a comprehensive dictionary of the day's market data, sends it to the
+    GPT-4 model for in-depth analysis, and returns a structured market report.
     """
-    print("   [INFO] Contacting AI Analyst (GPT-4)...")
-    
-    coin = daily_briefing_data.get("coin_name")
-    actual = daily_briefing_data.get("actual_price", 0)
-    prophet = daily_briefing_data.get("prophet_forecast", 0)
-    sentiment = daily_briefing_data.get("sentiment_score", 0)
-    rsi = daily_briefing_data.get("rsi", 0)
-    macd = daily_briefing_data.get("macd", 0)
-    headlines = daily_briefing_data.get("top_headlines", [])
+    if not client:
+        return {
+            "summary": "AI analysis failed because the OpenAI client is not configured.",
+            "hypothesis": "Configuration error.",
+            "news_links": "[]"
+        }
 
-    delta = actual - prophet
-    delta_percent = (delta / actual) * 100 if actual != 0 else 0
-    
-    headline_text = "\n".join([f"- {h['title']}" for h in headlines]) if headlines else "No headlines available."
+    coin_name = daily_briefing_data.get("coin_name", "the asset")
+    print(f"   [INFO] Briefing AI Analyst for comprehensive report on {coin_name}...")
 
-    prompt = f"""
-    Here is the daily market data for {coin}:
-    - Actual Closing Price: ${actual:,.2f}
-    - AI Forecasted Price: ${prophet:,.2f}
-    - Delta (Actual - Forecast): ${delta:,.2f} ({delta_percent:.2f}%)
-    - Market News Sentiment Score: {sentiment:.2f}
-    - RSI: {rsi:.2f}
-    - MACD: {macd:.2f}
-    - Top News Headlines Provided:
-    {headline_text}
+    # --- 1. Construct the UPGRADED Prompt ---
+    # This new prompt instructs the AI to generate a detailed, multi-part report.
+    system_prompt = """
+    You are an expert crypto market analyst writing a daily briefing. Your tone is objective, data-driven, and insightful. Your task is to synthesize a comprehensive set of market data into a multi-part report.
 
-    Please act as an expert financial analyst. Your task is to provide a concise, data-driven analysis.
+    You MUST provide your response in a single, valid JSON object with the following five keys:
+    1. "title": A compelling, news-style headline for today's analysis (e.g., "Ethereum Navigates On-Chain Strength Amidst Overheated Futures Market").
+    2. "price_action_recap": A 1-2 sentence summary of the recent price action, mentioning key support or resistance levels being tested.
+    3. "bullish_case": A markdown-formatted string. Detail the bullish signals from the provided data. For each point, start with a bolded title (e.g., "**On-Chain Accumulation**"), cite the specific metric (e.g., MVRV Ratio, Exchange Netflow), and explain its positive implication.
+    4. "bearish_case": A markdown-formatted string. Detail the bearish signals. Follow the same format as the bullish case, titling each point (e.g., "**Overheated Derivatives**") and citing the relevant data (e.g., Funding Rate).
+    5. "analyst_hypothesis": A concluding 2-3 sentence paragraph. Synthesize the conflicting bullish and bearish cases to form a primary, forward-looking hypothesis about the market's likely short-term direction.
+    """
 
-    Based *only* on the data provided, generate a JSON object with the following three keys:
-    1. "summary": A one-sentence summary of the day's forecast accuracy.
-    2. "hypothesis": A 2-3 sentence hypothesis explaining the most likely reason for the delta, citing specific data points to support your hypothesis.
-    3. "influential_headline_titles": An array of up to 3 strings, where each string is the exact title of a headline from the list provided that you believe was most influential.
+    # We provide the full briefing data to the AI.
+    user_prompt = f"""
+    Generate a comprehensive market analysis report for {coin_name} based on the following data.
+    Directly cite the data points in your analysis.
+
+    ```json
+    {json.dumps(daily_briefing_data, indent=2)}
+    ```
     """
 
     try:
-        client = openai.OpenAI()
+        # --- 2. Make the API Call to GPT-4 ---
         completion = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[
-                {"role": "system", "content": "You are a helpful financial analyst that provides structured data in JSON format."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.2
+            temperature=0.4 # A balance between creativity and factual analysis
         )
-        
-        response_content = completion.choices[0].message.content
-        analysis_from_ai = json.loads(response_content)
-        
-        # --- ROBUST URL MAPPING ---
-        # Look up the original URLs based on the titles returned by the AI
-        final_headlines = []
-        ai_titles = analysis_from_ai.get("influential_headline_titles", [])
-        for title in ai_titles:
-            for original_headline in headlines:
-                if original_headline["title"] == title:
-                    final_headlines.append(original_headline)
-                    break # Move to the next AI title
-        
-        # Prepare the final analysis object for the database
+
+        # --- 3. Parse and Prepare the Response ---
+        analysis_from_ai = json.loads(completion.choices[0].message.content)
+
+        # For the database, we'll combine the structured cases into one summary field.
+        # This keeps the database schema simpler while providing rich text for the frontend.
+        summary_for_db = f"### Bullish Case\n{analysis_from_ai.get('bullish_case', '')}\n\n### Bearish Case\n{analysis_from_ai.get('bearish_case', '')}"
+
+        # We will also need to update the database schema and daily_runner to save these new fields.
+        # For now, we'll structure the output dictionary.
         analysis_to_save = {
-            "summary": analysis_from_ai.get("summary"),
-            "hypothesis": analysis_from_ai.get("hypothesis"),
-            "news_links": json.dumps(final_headlines)
+            # Old fields for compatibility (can be removed later)
+            "summary": summary_for_db,
+            "hypothesis": analysis_from_ai.get("analyst_hypothesis", "No hypothesis generated."),
+            "news_links": json.dumps(daily_briefing_data.get("top_headlines", [])),
+
+            # New structured fields for the upgraded dashboard
+            "report_title": analysis_from_ai.get("title", "Daily Analysis"),
+            "report_recap": analysis_from_ai.get("price_action_recap", ""),
+            "report_bullish": analysis_from_ai.get("bullish_case", ""),
+            "report_bearish": analysis_from_ai.get("bearish_case", ""),
+            "report_hypothesis": analysis_from_ai.get("analyst_hypothesis", "")
         }
-        
-        print("   [SUCCESS] AI analysis generated and URLs verified.")
+
+        print(f"   [SUCCESS] Comprehensive AI analysis for {coin_name} generated.")
         return analysis_to_save
 
     except Exception as e:
@@ -81,5 +93,7 @@ def get_daily_analysis(daily_briefing_data: dict) -> dict:
         return {
             "summary": "AI analysis could not be generated due to an API error.",
             "hypothesis": str(e),
-            "news_links": json.dumps([])
+            "news_links": "[]",
+            "report_title": "Analysis Failed",
+            "report_recap": "", "report_bullish": "", "report_bearish": "", "report_hypothesis": ""
         }

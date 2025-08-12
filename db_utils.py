@@ -32,10 +32,17 @@ forecasts_table = Table('forecasts', metadata,
     # --- LunarCrush Social Data ---
     Column('Galaxy_Score', Float),
     Column('Alt_Rank', Float),
-    # --- AI Analysis & Feedback ---
+    # --- Old AI Analysis Fields (can be deprecated later) ---
     Column('analysis_summary', String),
     Column('analysis_hypothesis', String),
     Column('analysis_news_links', String),
+    # --- START: ADDED NEW REPORT COLUMNS ---
+    Column('report_title', String),
+    Column('report_recap', String),
+    Column('report_bullish', String),
+    Column('report_bearish', String),
+    Column('report_hypothesis', String),
+    # --- END: ADDED NEW REPORT COLUMNS ---
     Column('user_feedback', String),
     Column('user_correction', String)
 )
@@ -43,13 +50,10 @@ forecasts_table = Table('forecasts', metadata,
 def init_db():
     print("   [INFO] Initializing database...")
     try:
-        inspector = inspect(engine)
-        if not inspector.has_table('forecasts'):
-            print("   [INFO] 'forecasts' table not found. Creating table...")
-            metadata.create_all(engine)
-            print("   [SUCCESS] 'forecasts' table created.")
-        else:
-            print("   [INFO] 'forecasts' table already exists.")
+        # This will add the new columns to the existing table if they don't exist,
+        # without deleting the table.
+        metadata.create_all(engine, checkfirst=True)
+        print("   [SUCCESS] Database initialized and schema verified.")
     except Exception as e:
         print(f"❌ [ERROR] Could not initialize database: {e}")
         raise
@@ -67,6 +71,7 @@ def save_forecast_results(results_df: pd.DataFrame):
 def load_forecast_results() -> pd.DataFrame:
     print("   [INFO] Loading forecast results from the database...")
     try:
+        # Ensure we load all new columns
         query = text("SELECT * FROM forecasts ORDER BY \"Date\" DESC, id DESC")
         with engine.connect() as connection:
             df = pd.read_sql_query(query, connection)

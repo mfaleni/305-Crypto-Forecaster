@@ -13,9 +13,8 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 news_api_key = os.getenv("NEWS_API_KEY")
 
 # --- Robust Key Check ---
-# This checks all required keys to ensure the script can run successfully.
 required_keys = [
-    "OPENAI_API_KEY", "NEWS_API_KEY", "SANTIMENT_API_KEY", 
+    "OPENAI_API_KEY", "NEWS_API_KEY", "SANTIMENT_API_KEY",
     "LUNARCRUSH_API_KEY", "COINGECKO_API_KEY"
 ]
 missing_keys = [key for key in required_keys if not os.getenv(key)]
@@ -56,12 +55,12 @@ def run_daily_analysis():
             if market_data.empty or len(market_data) < 61:
                 print(f"   [WARN] Insufficient data for {ticker}. Skipping.")
                 continue
-            
+
             detailed_data_path = os.path.join(DATA_DIR, f"{ticker}_data.csv")
             market_data.to_csv(detailed_data_path)
-            
+
             latest_data = market_data.iloc[-1]
-            
+
             # Run forecasts and sentiment analysis
             prophet_price = prophet_forecast(market_data.copy())
             lstm_price = lstm_forecast(market_data.copy())
@@ -88,7 +87,7 @@ def run_daily_analysis():
             }
             analysis_results = get_daily_analysis(daily_briefing_data)
 
-            # Assemble the final, complete record for the database
+            # --- MODIFIED: Assemble the final record for the database ---
             result = {
                 "Date": today,
                 "Coin": ticker,
@@ -109,9 +108,18 @@ def run_daily_analysis():
                 "Galaxy_Score": latest_data.get("Galaxy_Score", 0.0),
                 "Alt_Rank": latest_data.get("Alt_Rank", 0.0),
                 "Exchange_Net_Flow": latest_data.get("Exchange_Net_Flow", 0.0),
-                "analysis_summary": analysis_results.get("summary"),
-                "analysis_hypothesis": analysis_results.get("hypothesis"),
+
+                # --- START: MAPPING NEW REPORT FIELDS ---
+                "analysis_summary": analysis_results.get("summary"),       # Old combined field
+                "analysis_hypothesis": analysis_results.get("hypothesis"), # Old hypothesis field
                 "analysis_news_links": analysis_results.get("news_links"),
+                "report_title": analysis_results.get("report_title"),
+                "report_recap": analysis_results.get("report_recap"),
+                "report_bullish": analysis_results.get("report_bullish"),
+                "report_bearish": analysis_results.get("report_bearish"),
+                "report_hypothesis": analysis_results.get("report_hypothesis"), # New, more detailed hypothesis
+                # --- END: MAPPING NEW REPORT FIELDS ---
+
                 "user_feedback": None,
                 "user_correction": None
             }
@@ -120,7 +128,7 @@ def run_daily_analysis():
         except Exception as e:
             print(f"❌ [ERROR] An unexpected error occurred while processing {ticker}: {e}")
             continue
-            
+
     print("\n✅ [FINISH] Daily processing complete.")
     if all_results:
         results_df = pd.DataFrame(all_results)
