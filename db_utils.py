@@ -2,18 +2,14 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine, text, inspect, Table, Column, MetaData, Integer, String, Float, DateTime
 
-# --- START: MODIFIED DATABASE CONNECTION LOGIC ---
-# This new logic intelligently connects to Render (cloud) or Docker (local)
-
+# --- Intelligent Database Connection Logic ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = None
 
 if DATABASE_URL:
-    # If a DATABASE_URL is provided (for Render), use it directly.
     print("   [INFO] Connecting to cloud database (Render)...")
     engine = create_engine(DATABASE_URL)
 else:
-    # If DATABASE_URL is not set, build the URL from local DB credentials.
     print("   [INFO] Connecting to local database (Docker)...")
     db_user = os.getenv("DB_USER")
     db_pass = os.getenv("DB_PASSWORD")
@@ -21,18 +17,15 @@ else:
     db_port = os.getenv("DB_PORT")
     db_name = os.getenv("DB_NAME")
     
-    # Check if all required local DB variables are present
     if not all([db_user, db_pass, db_host, db_port, db_name]):
         raise Exception("Missing one or more required local database environment variables (DB_USER, DB_PASSWORD, etc.).")
     
     local_db_url = f"postgresql+psycopg://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
     engine = create_engine(local_db_url)
 
-# --- END: MODIFIED DATABASE CONNECTION LOGIC ---
-
-
 metadata = MetaData()
 
+# --- MODIFIED: Added new columns to the table definition ---
 forecasts_table = Table('forecasts', metadata,
     Column('id', Integer, primary_key=True, autoincrement=True),
     Column('Date', DateTime, nullable=False),
@@ -45,14 +38,18 @@ forecasts_table = Table('forecasts', metadata,
     Column('MACD', Float),
     Column('All_Time_High', Float),
     Column('High_Forecast_5_Day', String),
+    # --- CoinGlass Futures Data ---
     Column('Funding_Rate', Float),
     Column('Open_Interest', Float),
     Column('Long_Short_Ratio', Float),
+    # --- Santiment On-Chain/Social Data ---
     Column('MVRV_Ratio', Float),
     Column('Social_Dominance', Float),
     Column('Daily_Active_Addresses', Float),
+    # --- LunarCrush Social Data ---
     Column('Galaxy_Score', Float),
     Column('Alt_Rank', Float),
+    # --- AI Analysis & Feedback ---
     Column('analysis_summary', String),
     Column('analysis_hypothesis', String),
     Column('analysis_news_links', String),
@@ -61,6 +58,11 @@ forecasts_table = Table('forecasts', metadata,
     Column('report_bullish', String),
     Column('report_bearish', String),
     Column('report_hypothesis', String),
+    # --- START: ADDED NEW ADVANCED METRIC COLUMNS ---
+    Column('Leverage_Ratio', Float),
+    Column('Futures_Volume_24h', Float),
+    Column('Exchange_Supply_Ratio', Float),
+    # --- END: ADDED NEW ADVANCED METRIC COLUMNS ---
     Column('user_feedback', String),
     Column('user_correction', String)
 )
@@ -78,11 +80,13 @@ def save_forecast_results(results_df: pd.DataFrame):
     print("   [INFO] Saving forecast results to the database...")
     try:
         results_df['Date'] = pd.to_datetime(results_df['Date'])
-        # Add a check for the 'Exchange_Net_Flow' column before saving
-        if 'Exchange_Net_Flow' not in forecasts_table.columns:
-             results_df = results_df.drop(columns=['Exchange_Net_Flow'], errors='ignore')
-        results_df.to_sql('forecasts', engine, if_exists='append', index=False)
-        print(f"   [SUCCESS] Saved {len(results_df)} new records to the database.")
+        # Drop columns that are not in the table schema to prevent errors
+        inspector = inspect(engine)
+        table_columns = [c['name'] for c in inspector.get_columns('forecasts')]
+        df_to_save = results_df[[col for col in results_df.columns if col in table_columns]]
+        
+        df_to_save.to_sql('forecasts', engine, if_exists='append', index=False)
+        print(f"   [SUCCESS] Saved {len(df_to_save)} new records to the database.")
     except Exception as e:
         print(f"❌ [ERROR] Could not save results to database: {e}")
         raise

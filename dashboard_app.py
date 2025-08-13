@@ -7,6 +7,9 @@ import os
 import json
 import numpy as np
 from db_utils import load_forecast_results, update_feedback
+# START: ADDED NEW IMPORT
+from chart_analyst import analyze_bollinger_bands, analyze_rsi
+# END: ADDED NEW IMPORT
 
 # --- Page Configuration ---
 st.set_page_config(page_title="305 Crypto Forecast", page_icon="📈", layout="wide")
@@ -31,6 +34,27 @@ def load_chart_data(ticker):
         except Exception:
             return None
     return None
+
+# START: ADDED NEW FIBONACCI CALCULATION FUNCTION
+def calculate_fibonacci_levels(df: pd.DataFrame):
+    """Calculates Fibonacci retracement levels for the given data."""
+    if df.empty:
+        return {}
+    
+    highest_high = df['High'].max()
+    lowest_low = df['Low'].min()
+    price_range = highest_high - lowest_low
+
+    levels = {
+        "Level 0% (High)": highest_high,
+        "Level 23.6%": highest_high - (price_range * 0.236),
+        "Level 38.2%": highest_high - (price_range * 0.382),
+        "Level 50%": highest_high - (price_range * 0.5),
+        "Level 61.8%": highest_high - (price_range * 0.618),
+        "Level 100% (Low)": lowest_low,
+    }
+    return levels
+# END: ADDED NEW FIBONACCI CALCULATION FUNCTION
 
 # --- Main Application ---
 st.title("📈 305 Crypto Forecast Dashboard")
@@ -57,7 +81,10 @@ def format_numeric_columns(df):
         'Market_Cap_Rank', 'Community_Score', 'Developer_Score', 'Sentiment_Up_Percentage',
         'Forecasted High', 'Funding_Rate', 'Open_Interest', 'Long_Short_Ratio',
         'MVRV_Ratio', 'Social_Dominance', 'Daily_Active_Addresses',
-        'Galaxy_Score', 'Alt_Rank'
+        'Galaxy_Score', 'Alt_Rank',
+        # START: ADDED NEW COLS FOR FORMATTING
+        'Leverage_Ratio', 'Futures_Volume_24h', 'Exchange_Supply_Ratio'
+        # END: ADDED NEW COLS FOR FORMATTING
     ]
     for col in numeric_cols:
         if col in formatted_df.columns:
@@ -84,21 +111,9 @@ col1.metric("Actual Price", f"${actual_price:,.2f}" if pd.notna(actual_price) el
 col2.metric("All-Time High", f"${all_time_high:,.2f}" if pd.notna(all_time_high) else "N/A")
 col3.metric("Sentiment Score", f"{sentiment_score:.2f}" if pd.notna(sentiment_score) else "N/A")
 
-with st.expander("❓ **Explain the Sentiment Score**"):
-    st.info(
-        """
-        The **Sentiment Score** is an aggregated value from a natural language processing (NLP) analysis of recent news articles.
-        - **A positive score** (e.g., > 0.10) indicates a **bullish sentiment** towards the cryptocurrency.
-        - **A negative score** (e.g., < -0.10) indicates a **bearish sentiment**.
-        - **A score close to zero** indicates a **neutral market sentiment**.
-        This score is a key fundamental indicator, as news and public opinion often precede price movements.
-        """
-    )
-
-# --- START: MODIFIED AI ANALYSIS SECTION ---
+# --- START: UPGRADED AI ANALYSIS SECTION ---
 st.header("Daily AI Analyst Report")
 with st.container(border=True):
-    # Fetch the new, detailed report fields
     title = coin_forecast.get('report_title', 'Analysis not available.')
     recap = coin_forecast.get('report_recap', '')
     bullish_case = coin_forecast.get('report_bullish', 'Bullish case not available.')
@@ -106,7 +121,6 @@ with st.container(border=True):
     hypothesis = coin_forecast.get('report_hypothesis', 'Hypothesis not available.')
     news_links_json = coin_forecast.get('analysis_news_links', '[]')
     
-    # Display the new, structured report
     st.subheader(title)
     st.caption(recap)
     
@@ -139,7 +153,6 @@ with st.container(border=True):
 
     st.markdown("---")
     st.subheader("Provide Feedback on this Analysis")
-    # The feedback mechanism remains unchanged
     record_id = coin_forecast['id']
     current_feedback = coin_forecast.get('user_feedback')
     if pd.notna(current_feedback):
@@ -169,29 +182,38 @@ with st.container(border=True):
                     st.rerun()
                 else:
                     st.error("Failed to save correction.")
-# --- END: MODIFIED AI ANALYSIS SECTION ---
+# --- END: UPGRADED AI ANALYSIS SECTION ---
 
 
 st.header("Professional Grade Market Indicators")
-# ... (This section and all subsequent sections remain unchanged) ...
 with st.container(border=True):
-    st.subheader("Futures & Derivatives Data (from CoinGlass)")
-    cg_col1, cg_col2, cg_col3 = st.columns(3)
+    st.subheader("Futures & Derivatives Data")
+    # START: MODIFIED TO INCLUDE NEW METRICS
+    cg_col1, cg_col2, cg_col3, cg_col4 = st.columns(4)
     funding_rate = pd.to_numeric(coin_forecast.get('Funding_Rate'), errors='coerce')
     open_interest = pd.to_numeric(coin_forecast.get('Open_Interest'), errors='coerce')
     long_short_ratio = pd.to_numeric(coin_forecast.get('Long_Short_Ratio'), errors='coerce')
+    futures_volume = pd.to_numeric(coin_forecast.get('Futures_Volume_24h'), errors='coerce')
+    
     cg_col1.metric("Funding Rate", f"{funding_rate:.4f}%" if pd.notna(funding_rate) else "N/A")
     cg_col2.metric("Open Interest", f"${open_interest:,.0f}" if pd.notna(open_interest) else "N/A")
     cg_col3.metric("Long/Short Ratio", f"{long_short_ratio:.2f}" if pd.notna(long_short_ratio) else "N/A")
+    cg_col4.metric("Futures Volume (24h)", f"${futures_volume:,.0f}" if pd.notna(futures_volume) else "N/A")
+    # END: MODIFIED TO INCLUDE NEW METRICS
 
-    st.subheader("On-Chain & Social Metrics (from Santiment)")
-    san_col1, san_col2, san_col3 = st.columns(3)
+    st.subheader("On-Chain & Social Metrics")
+    # START: MODIFIED TO INCLUDE NEW METRICS
+    san_col1, san_col2, san_col3, san_col4 = st.columns(4)
     mvrv = pd.to_numeric(coin_forecast.get('MVRV_Ratio'), errors='coerce')
     social_dom = pd.to_numeric(coin_forecast.get('Social_Dominance'), errors='coerce')
     daa = pd.to_numeric(coin_forecast.get('Daily_Active_Addresses'), errors='coerce')
+    esr = pd.to_numeric(coin_forecast.get('Exchange_Supply_Ratio'), errors='coerce')
+
     san_col1.metric("MVRV Ratio", f"{mvrv:.2f}" if pd.notna(mvrv) else "N/A")
     san_col2.metric("Social Dominance", f"{social_dom:.2f}%" if pd.notna(social_dom) else "N/A")
     san_col3.metric("Daily Active Addresses", f"{daa:,.0f}" if pd.notna(daa) else "N/A")
+    san_col4.metric("Exchange Supply Ratio", f"{esr:.2f}" if pd.notna(esr) else "N/A (Placeholder)")
+    # END: MODIFIED TO INCLUDE NEW METRICS
 
     st.subheader("Social Intelligence (from LunarCrush)")
     lc_col1, lc_col2 = st.columns(2)
@@ -201,6 +223,7 @@ with st.container(border=True):
     lc_col2.metric("AltRank™", f"#{alt_rank:.0f}" if pd.notna(alt_rank) else "N/A")
 
 st.header("5-Day High Forecast vs. Historical Highs")
+# This section remains unchanged
 if chart_data is not None and 'High_Forecast_5_Day' in coin_forecast and pd.notna(coin_forecast['High_Forecast_5_Day']):
     historical_highs = chart_data[['High']].tail(5)
     historical_highs.index = historical_highs.index.strftime('%Y-%m-%d')
@@ -222,61 +245,58 @@ else:
 
 st.header(f"Technical Indicators for {selected_coin}")
 if chart_data is not None:
+    # START: UPGRADED BOLLINGER BANDS SECTION
     st.subheader("Price, Moving Averages, & Bollinger Bands")
     st.line_chart(chart_data[['Close', 'SMA', 'EMA', 'BB_High', 'BB_Low']])
-    st.info(
-        """
-        **Reasoning:** These indicators help identify the current trend and volatility.
-        - **SMA/EMA:** A price above its moving average suggests an uptrend, while a price below suggests a downtrend. Crossovers can signal a change in trend.
-        - **Bollinger Bands:** The bands widen during high volatility and narrow during low volatility. A price touching the upper band may suggest it's overbought, while touching the lower band may suggest it's oversold.
-        """
-    )
+    st.info(f"**Analysis:** {analyze_bollinger_bands(chart_data)}") # DYNAMIC ANALYSIS
+    # END: UPGRADED BOLLINGER BANDS SECTION
+    
     tech_col1, tech_col2 = st.columns(2)
     with tech_col1:
+        # START: UPGRADED RSI SECTION
         st.subheader("RSI (Relative Strength Index)")
         st.line_chart(chart_data['RSI'])
-        st.info(
-            """
-            **Reasoning:** RSI measures the speed and change of price movements to identify overbought or oversold conditions.
-            - **Action:** A reading above 70 suggests the asset may be overbought and due for a correction. A reading below 30 suggests it may be oversold and poised for a rebound.
-            """
-        )
+        st.info(f"**Analysis:** {analyze_rsi(chart_data)}") # DYNAMIC ANALYSIS
+        # END: UPGRADED RSI SECTION
+        
         st.subheader("Stochastic Oscillator")
         st.line_chart(chart_data[['Stoch_k', 'Stoch_d']])
-        st.info(
-            """
-            **Reasoning:** This momentum indicator compares a specific closing price to a range of its prices over time.
-            - **Action:** Like RSI, readings above 80 indicate overbought conditions, while readings below 20 indicate oversold conditions. Crossovers between the %K and %D lines can also be used as buy or sell signals.
-            """
-        )
+        # Placeholder for dynamic Stochastic analysis
+        st.info("**Analysis:** Readings above 80 indicate overbought conditions, while below 20 indicate oversold.")
+
     with tech_col2:
         st.subheader("MACD (Moving Average Convergence Divergence)")
         st.line_chart(chart_data[['MACD', 'MACD_Signal']])
-        st.info(
-            """
-            **Reasoning:** MACD is a trend-following momentum indicator that shows the relationship between two moving averages.
-            - **Action:** When the MACD line (blue) crosses above the Signal line (orange), it's a bullish signal, suggesting it may be a good time to buy. When it crosses below, it's a bearish signal.
-            """
-        )
+        # Placeholder for dynamic MACD analysis
+        st.info("**Analysis:** When the MACD line crosses above the Signal line, it's a bullish signal.")
+
         st.subheader("OBV (On-Balance Volume)")
         st.line_chart(chart_data['OBV'])
-        st.info(
-            """
-            **Reasoning:** OBV uses volume flow to predict price changes. The idea is that volume precedes price.
-            - **Action:** A rising OBV indicates positive volume pressure that can confirm an uptrend. A falling OBV suggests negative pressure that could signal a downtrend.
-            """
-        )
-    st.subheader("Ichimoku Cloud")
-    st.line_chart(chart_data[['Ichimoku_a', 'Ichimoku_b', 'Close']])
-    st.info(
-        """
-        **Reasoning:** This is an all-in-one indicator that provides information on support, resistance, trend direction, and momentum.
-        - **Action:** If the price is above the cloud, the overall trend is considered bullish. If the price is below the cloud, the trend is bearish. The cloud itself also acts as a dynamic zone of support or resistance.
-        - **Ichimoku Cloud A vs. B:** The cloud is formed by the Senkou Span A (`Ichimoku_a`) and Senkou Span B (`Ichimoku_b`). When **A is above B**, the cloud is typically green and signals a **bullish trend**. When **B is above A**, the cloud is red and signals a **bearish trend**. The cloud's thickness indicates the strength of the trend.
-        """
-    )
+        # Placeholder for dynamic OBV analysis
+        st.info("**Analysis:** A rising OBV indicates positive volume pressure that can confirm an uptrend.")
+
+    # START: UPGRADED PRICE CHART WITH FIBONACCI LEVELS
+    st.subheader("Price Chart with Fibonacci Levels")
+    fib_levels = calculate_fibonacci_levels(chart_data)
+    
+    # Create a new DataFrame for plotting that includes the price and Fib levels
+    plot_df = chart_data[['Close']].copy()
+    for name, level in fib_levels.items():
+        plot_df[name] = level
+        
+    st.line_chart(plot_df)
+    st.info(f"""
+        **Analysis:** The Fibonacci levels are key potential areas of support and resistance. 
+        The market will often see price react around these levels. 
+        Currently, the key support is at the **{list(fib_levels.keys())[4]}** (${fib_levels[list(fib_levels.keys())[4]]:,.2f}) and 
+        the key resistance is at the **{list(fib_levels.keys())[1]}** (${fib_levels[list(fib_levels.keys())[1]]:,.2f}).
+    """)
+    # END: UPGRADED PRICE CHART WITH FIBONACCI LEVELS
+
 else:
     st.warning(f"Could not load technical indicator data for {selected_coin}.")
+
+# ... (The "On-Chain & Fundamental Indicators" and "Raw Data Viewer" sections remain unchanged) ...
 
 st.header(f"On-Chain & Fundamental Indicators for {selected_coin}")
 if chart_data is not None:

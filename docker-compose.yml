@@ -1,7 +1,6 @@
 # Use version 3.8 of the Docker Compose file format for modern features.
 version: "3.8"
 
-# Define the services (containers) that make up your application.
 services:
   # 1. The Database Service
   db:
@@ -25,13 +24,13 @@ services:
       - db
     env_file:
       - .env
-    # --- START: ADDED THIS SECTION ---
     ports:
-      # Map port 8501 on your computer (localhost) to port 8501 inside the container.
       - "8501:8501"
+    # --- START: ADDED THIS SECTION ---
+    # Add a public DNS server to resolve network issues inside the container.
+    dns:
+      - 8.8.8.8
     # --- END: ADDED THIS SECTION ---
 
-
-# Define the persistent volume used by the 'db' service.
 volumes:
   postgres_data:

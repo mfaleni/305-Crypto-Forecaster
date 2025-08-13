@@ -8,72 +8,23 @@ from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 import numpy as np
 from datetime import datetime, timedelta
-import pandas as pd
-import requests # Make sure 'requests' is imported
 import time
 
 # --- API HELPER FUNCTIONS ---
 
-def get_exchange_netflow(symbol):
-    """
-    Fetches the daily exchange netflow for a given crypto asset.
-    
-    A negative value indicates net outflows (accumulation).
-    A positive value indicates net inflows (potential selling).
-
-    Args:
-        symbol (str): The cryptocurrency symbol (e.g., 'BTC', 'ETH').
-
-    Returns:
-        pd.DataFrame: A DataFrame with 'date' and 'netflow_usd' columns, or None if failed.
-    """
-    # We use a public API from Blockchain.com for this example.
-    # Note: Symbol must be lowercase for this specific API endpoint.
-    url = f"https://api.blockchain.com/v3/exchange/metrics/exchange-net-flow?asset={symbol.lower()}"
-    
-    print(f"   [INFO] Fetching exchange netflow data for {symbol}...")
-    
-    try:
-        response = requests.get(url)
-        
-        # Check if the request was successful
-        if response.status_code != 200:
-            print(f"   [WARNING] Failed to fetch netflow data for {symbol}. Status code: {response.status_code}")
-            return None
-            
-        data = response.json()
-        
-        # Convert the list of dictionaries into a DataFrame
-        df = pd.DataFrame(data)
-        
-        if df.empty:
-            print(f"   [WARNING] Netflow data for {symbol} is empty.")
-            return None
-
-        # The timestamp is in microseconds; convert to datetime objects
-        df['date'] = pd.to_datetime(df['timestamp'] / 1000, unit='s').dt.date
-        
-        # Select and rename columns for clarity and consistency
-        df = df[['date', 'value_usd']]
-        df = df.rename(columns={'value_usd': 'netflow_usd'})
-        
-        # Convert date to datetime64[ns] to ensure it can be merged later
-        df['date'] = pd.to_datetime(df['date'])
-
-        print(f"   [SUCCESS] Successfully fetched exchange netflow data for {symbol}.")
-        return df
-
-    except requests.exceptions.RequestException as e:
-        print(f"   [ERROR] An error occurred while fetching netflow data: {e}")
-        return None
-
 def fetch_coinglass_data(symbol: str) -> dict:
-    """Fetches futures data for a given symbol from the CoinGlass API."""
+    """Fetches advanced futures and derivatives data for a given symbol from the CoinGlass API."""
     print(f"   [INFO] Fetching futures data for {symbol} from CoinGlass...")
     headers = {'accept': 'application/json'}
     api_symbol = symbol.replace("-USD", "")
-    data = {'funding_rate': 0.0, 'open_interest': 0.0, 'long_short_ratio': 0.0}
+    data = {
+        'funding_rate': 0.0, 'open_interest': 0.0, 'long_short_ratio': 0.0,
+        # START: ADDED NEW FIELDS
+        'leverage_ratio': 0.0, 'futures_volume_24h': 0.0
+        # END: ADDED NEW FIELDS
+    }
     try:
+        # Standard OI/Funding/LS Ratio
         funding_url = f"https://open-api.coinglass.com/public/v2/funding?ex=Binance&symbol={api_symbol}"
         oi_url = f"https://open-api.coinglass.com/public/v2/open_interest?ex=Binance&symbol={api_symbol}"
         ls_url = f"https://open-api.coinglass.com/public/v2/long_short?ex=Binance&symbol={api_symbol}"
@@ -90,11 +41,49 @@ def fetch_coinglass_data(symbol: str) -> dict:
         if ls_res.ok and ls_res.json().get('data'):
             data['long_short_ratio'] = ls_res.json()['data'][0].get('longShortRatio', 0.0)
         
+        # START: ADDED NEW API CALLS
+        # Fetch Leverage and Volume Data
+        leverage_url = f"https://open-api.coinglass.com/public/v2/indicator/long_short_accounts?ex=Binance&symbol={api_symbol}&interval=1h"
+        volume_url = f"https://open-api.coinglass.com/public/v2/indicator/open_interest_ohlc?ex=Binance&symbol={api_symbol}&interval=24h"
+
+        leverage_res = requests.get(leverage_url, headers=headers)
+        if leverage_res.ok and leverage_res.json().get('data'):
+            latest_leverage_data = leverage_res.json()['data'][-1]
+            longs = latest_leverage_data.get('longVolUsd', 0)
+            shorts = latest_leverage_data.get('shortVolUsd', 0)
+            if shorts > 0:
+                data['leverage_ratio'] = longs / shorts
+
+        volume_res = requests.get(volume_url, headers=headers)
+        if volume_res.ok and volume_res.json().get('data'):
+            data['futures_volume_24h'] = volume_res.json()['data'][0][4] # Index 4 is the volume
+        # END: ADDED NEW API CALLS
+
         print("   [SUCCESS] Futures data fetched.")
         return data
     except Exception as e:
         print(f"   [WARN] Could not fetch CoinGlass data: {e}")
         return data
+
+# START: ADDED NEW FUNCTION PLACEHOLDER
+def fetch_cryptoquant_data(symbol: str) -> dict:
+    """
+    Placeholder for fetching advanced on-chain data like Exchange Supply Ratio (ESR).
+    This will require a CryptoQuant API key added to the .env file.
+    """
+    print(f"   [INFO] Fetching advanced on-chain data for {symbol} from CryptoQuant...")
+    # api_key = os.getenv("CRYPTOQUANT_API_KEY")
+    # if not api_key:
+    #     print("   [WARN] CRYPTOQUANT_API_KEY not found. Skipping.")
+    #     return {'exchange_supply_ratio': 0.0}
+    
+    # In a real implementation, you would make the API call here.
+    # For now, we return a placeholder.
+    print("   [SUCCESS] CryptoQuant data fetched (placeholder).")
+    return {'exchange_supply_ratio': 0.0}
+# END: ADDED NEW FUNCTION PLACEHOLDER
+
+# ... (fetch_santiment_data, fetch_lunarcrush_data, etc., remain the same) ...
 
 def fetch_santiment_data(slug: str) -> dict:
     """Fetches on-chain/social data for a given slug directly from the Santiment GraphQL API."""
@@ -189,6 +178,7 @@ def fetch_coingecko_data(coin_id: str) -> dict:
         print(f"   [WARN] Could not fetch CoinGecko data for {coin_id}: {e}")
         return {}
 
+
 def fetch_data(coin: str) -> pd.DataFrame:
     """
     Fetches historical data, calculates technical indicators, and enriches
@@ -223,6 +213,9 @@ def fetch_data(coin: str) -> pd.DataFrame:
         futures_data = fetch_coinglass_data(coin)
         santiment_data = fetch_santiment_data(santiment_slug)
         lunar_data = fetch_lunarcrush_data(coin)
+        # START: ADDED NEW FUNCTION CALL
+        cryptoquant_data = fetch_cryptoquant_data(coin)
+        # END: ADDED NEW FUNCTION CALL
         
         # Add all data points to the DataFrame, ensuring fallbacks are numeric
         df['Market_Cap_Rank'] = cg_data.get('market_cap_rank', 0)
@@ -236,6 +229,10 @@ def fetch_data(coin: str) -> pd.DataFrame:
         df['Funding_Rate'] = futures_data.get('funding_rate', 0.0)
         df['Open_Interest'] = futures_data.get('open_interest', 0.0)
         df['Long_Short_Ratio'] = futures_data.get('long_short_ratio', 0.0)
+        # START: ADDED NEW FIELDS TO DATAFRAME
+        df['Leverage_Ratio'] = futures_data.get('leverage_ratio', 0.0)
+        df['Futures_Volume_24h'] = futures_data.get('futures_volume_24h', 0.0)
+        # END: ADDED NEW FIELDS TO DATAFRAME
         
         df['MVRV_Ratio'] = santiment_data.get('mvrv_usd', 0.0)
         df['Social_Dominance'] = santiment_data.get('social_dominance', 0.0)
@@ -243,6 +240,12 @@ def fetch_data(coin: str) -> pd.DataFrame:
         
         df['Galaxy_Score'] = lunar_data.get('galaxy_score', 0.0)
         df['Alt_Rank'] = lunar_data.get('alt_rank', 0)
+        
+        # START: ADDED NEW FIELDS TO DATAFRAME
+        # This is the proper place to call your original netflow function if you have one.
+        # For now, we add the CryptoQuant placeholder.
+        df['Exchange_Supply_Ratio'] = cryptoquant_data.get('exchange_supply_ratio', 0.0)
+        # END: ADDED NEW FIELDS TO DATAFRAME
         
         # We don't have a free Glassnode source for this, so we'll add a placeholder
         df['Exchange_Net_Flow'] = 0.0
