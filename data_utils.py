@@ -19,17 +19,17 @@ def fetch_coinglass_data(symbol: str) -> dict:
     api_symbol = symbol.replace("-USD", "")
     data = {
         'funding_rate': 0.0, 'open_interest': 0.0, 'long_short_ratio': 0.0,
-        # START: ADDED NEW FIELDS
         'leverage_ratio': 0.0, 'futures_volume_24h': 0.0
-        # END: ADDED NEW FIELDS
     }
     try:
-        # Standard OI/Funding/LS Ratio
         funding_url = f"https://open-api.coinglass.com/public/v2/funding?ex=Binance&symbol={api_symbol}"
         oi_url = f"https://open-api.coinglass.com/public/v2/open_interest?ex=Binance&symbol={api_symbol}"
         ls_url = f"https://open-api.coinglass.com/public/v2/long_short?ex=Binance&symbol={api_symbol}"
+        leverage_url = f"https://open-api.coinglass.com/public/v2/indicator/long_short_accounts?ex=Binance&symbol={api_symbol}&interval=1h"
+        volume_url = f"https://open-api.coinglass.com/public/v2/indicator/open_interest_ohlc?ex=Binance&symbol={api_symbol}&interval=24h"
 
         funding_res = requests.get(funding_url, headers=headers)
+        print(f"   [DEBUG] CoinGlass Funding Response: {funding_res.text[:100]}")
         if funding_res.ok and funding_res.json().get('data'):
             data['funding_rate'] = funding_res.json()['data'][0].get('rate', 0.0) * 100
         
@@ -40,11 +40,6 @@ def fetch_coinglass_data(symbol: str) -> dict:
         ls_res = requests.get(ls_url, headers=headers)
         if ls_res.ok and ls_res.json().get('data'):
             data['long_short_ratio'] = ls_res.json()['data'][0].get('longShortRatio', 0.0)
-        
-        # START: ADDED NEW API CALLS
-        # Fetch Leverage and Volume Data
-        leverage_url = f"https://open-api.coinglass.com/public/v2/indicator/long_short_accounts?ex=Binance&symbol={api_symbol}&interval=1h"
-        volume_url = f"https://open-api.coinglass.com/public/v2/indicator/open_interest_ohlc?ex=Binance&symbol={api_symbol}&interval=24h"
 
         leverage_res = requests.get(leverage_url, headers=headers)
         if leverage_res.ok and leverage_res.json().get('data'):
@@ -56,8 +51,7 @@ def fetch_coinglass_data(symbol: str) -> dict:
 
         volume_res = requests.get(volume_url, headers=headers)
         if volume_res.ok and volume_res.json().get('data'):
-            data['futures_volume_24h'] = volume_res.json()['data'][0][4] # Index 4 is the volume
-        # END: ADDED NEW API CALLS
+            data['futures_volume_24h'] = volume_res.json()['data'][0][4]
 
         print("   [SUCCESS] Futures data fetched.")
         return data
@@ -65,25 +59,12 @@ def fetch_coinglass_data(symbol: str) -> dict:
         print(f"   [WARN] Could not fetch CoinGlass data: {e}")
         return data
 
-# START: ADDED NEW FUNCTION PLACEHOLDER
 def fetch_cryptoquant_data(symbol: str) -> dict:
-    """
-    Placeholder for fetching advanced on-chain data like Exchange Supply Ratio (ESR).
-    This will require a CryptoQuant API key added to the .env file.
-    """
+    """Placeholder for fetching advanced on-chain data like Exchange Supply Ratio (ESR)."""
     print(f"   [INFO] Fetching advanced on-chain data for {symbol} from CryptoQuant...")
-    # api_key = os.getenv("CRYPTOQUANT_API_KEY")
-    # if not api_key:
-    #     print("   [WARN] CRYPTOQUANT_API_KEY not found. Skipping.")
-    #     return {'exchange_supply_ratio': 0.0}
-    
-    # In a real implementation, you would make the API call here.
-    # For now, we return a placeholder.
+    # To implement: Add CRYPTOQUANT_API_KEY to .env and make the API call here.
     print("   [SUCCESS] CryptoQuant data fetched (placeholder).")
     return {'exchange_supply_ratio': 0.0}
-# END: ADDED NEW FUNCTION PLACEHOLDER
-
-# ... (fetch_santiment_data, fetch_lunarcrush_data, etc., remain the same) ...
 
 def fetch_santiment_data(slug: str) -> dict:
     """Fetches on-chain/social data for a given slug directly from the Santiment GraphQL API."""
@@ -108,6 +89,7 @@ def fetch_santiment_data(slug: str) -> dict:
     """
     try:
         response = requests.post('https://api.santiment.net/graphql', json={'query': query}, headers={'Authorization': f'Apikey {api_key}'})
+        print(f"   [DEBUG] Santiment Raw Response: {response.text[:200]}")
         response.raise_for_status()
         data = response.json().get('data', {})
         
@@ -140,6 +122,7 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
     
     try:
         response = requests.get(url, headers=headers)
+        print(f"   [DEBUG] LunarCrush Raw Response: {response.text[:200]}")
         response.raise_for_status()
         data = response.json().get('data', {})
         
@@ -161,6 +144,7 @@ def fetch_coingecko_data(coin_id: str) -> dict:
     params = {'x_cg_demo_api_key': api_key}
     try:
         response = requests.get(url, params=params)
+        print(f"   [DEBUG] CoinGecko Raw Response: {response.text[:200]}")
         response.raise_for_status()
         data = response.json()
         metrics = {
@@ -178,7 +162,6 @@ def fetch_coingecko_data(coin_id: str) -> dict:
         print(f"   [WARN] Could not fetch CoinGecko data for {coin_id}: {e}")
         return {}
 
-
 def fetch_data(coin: str) -> pd.DataFrame:
     """
     Fetches historical data, calculates technical indicators, and enriches
@@ -193,7 +176,6 @@ def fetch_data(coin: str) -> pd.DataFrame:
         if df.empty: return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
-        # Technical Indicators
         print("   [INFO] Calculating technical indicators...")
         df['SMA'] = SMAIndicator(close=df['Close'], window=20).sma_indicator()
         df['EMA'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
@@ -208,16 +190,12 @@ def fetch_data(coin: str) -> pd.DataFrame:
         ichimoku = IchimokuIndicator(high=df['High'], low=df['Low'])
         df['Ichimoku_a'] = ichimoku.ichimoku_a(); df['Ichimoku_b'] = ichimoku.ichimoku_b()
 
-        # Integrate ALL Advanced Data Sources
         cg_data = fetch_coingecko_data(santiment_slug)
         futures_data = fetch_coinglass_data(coin)
         santiment_data = fetch_santiment_data(santiment_slug)
         lunar_data = fetch_lunarcrush_data(coin)
-        # START: ADDED NEW FUNCTION CALL
         cryptoquant_data = fetch_cryptoquant_data(coin)
-        # END: ADDED NEW FUNCTION CALL
         
-        # Add all data points to the DataFrame, ensuring fallbacks are numeric
         df['Market_Cap_Rank'] = cg_data.get('market_cap_rank', 0)
         df['All_Time_High_Real'] = cg_data.get('ath_usd', 0.0)
         df['Transaction_Volume_24h'] = cg_data.get('total_volume', 0.0)
@@ -229,10 +207,8 @@ def fetch_data(coin: str) -> pd.DataFrame:
         df['Funding_Rate'] = futures_data.get('funding_rate', 0.0)
         df['Open_Interest'] = futures_data.get('open_interest', 0.0)
         df['Long_Short_Ratio'] = futures_data.get('long_short_ratio', 0.0)
-        # START: ADDED NEW FIELDS TO DATAFRAME
         df['Leverage_Ratio'] = futures_data.get('leverage_ratio', 0.0)
         df['Futures_Volume_24h'] = futures_data.get('futures_volume_24h', 0.0)
-        # END: ADDED NEW FIELDS TO DATAFRAME
         
         df['MVRV_Ratio'] = santiment_data.get('mvrv_usd', 0.0)
         df['Social_Dominance'] = santiment_data.get('social_dominance', 0.0)
@@ -241,13 +217,7 @@ def fetch_data(coin: str) -> pd.DataFrame:
         df['Galaxy_Score'] = lunar_data.get('galaxy_score', 0.0)
         df['Alt_Rank'] = lunar_data.get('alt_rank', 0)
         
-        # START: ADDED NEW FIELDS TO DATAFRAME
-        # This is the proper place to call your original netflow function if you have one.
-        # For now, we add the CryptoQuant placeholder.
         df['Exchange_Supply_Ratio'] = cryptoquant_data.get('exchange_supply_ratio', 0.0)
-        # END: ADDED NEW FIELDS TO DATAFRAME
-        
-        # We don't have a free Glassnode source for this, so we'll add a placeholder
         df['Exchange_Net_Flow'] = 0.0
 
         df.dropna(inplace=True)
