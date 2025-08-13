@@ -15,7 +15,19 @@ import time
 def fetch_coinglass_data(symbol: str) -> dict:
     """Fetches advanced futures and derivatives data for a given symbol from the CoinGlass API."""
     print(f"   [INFO] Fetching futures data for {symbol} from CoinGlass...")
-    headers = {'accept': 'application/json'}
+    
+    # --- START: MODIFIED SECTION ---
+    coinglass_api_key = os.getenv("COINGLASS_API_KEY")
+    if not coinglass_api_key:
+        print("   [WARN] COINGLASS_API_KEY not found. Skipping.")
+        return {}
+    
+    headers = {
+        'accept': 'application/json',
+        'coinglassSecret': coinglass_api_key
+    }
+    # --- END: MODIFIED SECTION ---
+
     api_symbol = symbol.replace("-USD", "")
     data = {
         'funding_rate': 0.0, 'open_interest': 0.0, 'long_short_ratio': 0.0,
@@ -29,7 +41,6 @@ def fetch_coinglass_data(symbol: str) -> dict:
         volume_url = f"https://open-api.coinglass.com/public/v2/indicator/open_interest_ohlc?ex=Binance&symbol={api_symbol}&interval=24h"
 
         funding_res = requests.get(funding_url, headers=headers)
-        print(f"   [DEBUG] CoinGlass Funding Response: {funding_res.text[:100]}")
         if funding_res.ok and funding_res.json().get('data'):
             data['funding_rate'] = funding_res.json()['data'][0].get('rate', 0.0) * 100
         
@@ -62,7 +73,6 @@ def fetch_coinglass_data(symbol: str) -> dict:
 def fetch_cryptoquant_data(symbol: str) -> dict:
     """Placeholder for fetching advanced on-chain data like Exchange Supply Ratio (ESR)."""
     print(f"   [INFO] Fetching advanced on-chain data for {symbol} from CryptoQuant...")
-    # To implement: Add CRYPTOQUANT_API_KEY to .env and make the API call here.
     print("   [SUCCESS] CryptoQuant data fetched (placeholder).")
     return {'exchange_supply_ratio': 0.0}
 
@@ -89,7 +99,6 @@ def fetch_santiment_data(slug: str) -> dict:
     """
     try:
         response = requests.post('https://api.santiment.net/graphql', json={'query': query}, headers={'Authorization': f'Apikey {api_key}'})
-        print(f"   [DEBUG] Santiment Raw Response: {response.text[:200]}")
         response.raise_for_status()
         data = response.json().get('data', {})
         
@@ -122,7 +131,6 @@ def fetch_lunarcrush_data(symbol: str) -> dict:
     
     try:
         response = requests.get(url, headers=headers)
-        print(f"   [DEBUG] LunarCrush Raw Response: {response.text[:200]}")
         response.raise_for_status()
         data = response.json().get('data', {})
         
@@ -144,7 +152,6 @@ def fetch_coingecko_data(coin_id: str) -> dict:
     params = {'x_cg_demo_api_key': api_key}
     try:
         response = requests.get(url, params=params)
-        print(f"   [DEBUG] CoinGecko Raw Response: {response.text[:200]}")
         response.raise_for_status()
         data = response.json()
         metrics = {
