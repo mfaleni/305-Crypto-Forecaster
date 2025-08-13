@@ -1,36 +1,45 @@
 # Use version 3.8 of the Docker Compose file format for modern features.
 version: "3.8"
 
+# Define the services (containers) that make up your application.
 services:
   # 1. The Database Service
   db:
-    image: postgres:14-alpine
+    image: postgres:14-alpine # Use a specific, lightweight version of PostgreSQL.
     container_name: crypto_db_container
     environment:
+      # These variables are passed from your .env file to configure the database.
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
+      # Map port 5432 on your Mac to port 5432 inside the container.
+      # This lets you connect to the database from your local machine.
       - "5432:5432"
     volumes:
+      # This creates a persistent storage volume named 'postgres_data'.
+      # It ensures your database data is saved even if the container is removed.
       - postgres_data:/var/lib/postgresql/data
 
   # 2. Your Application Service
   app:
-    build: .
+    build: . # Build the app's Docker image from the Dockerfile in the current directory.
     image: crypto-forecaster
     container_name: crypto_forecaster_app
     depends_on:
+      # This tells Docker to start the 'db' service BEFORE starting the 'app' service.
+      # It ensures the database is ready to accept connections.
       - db
     env_file:
+      # Load the environment variables from your .env file into the app container.
       - .env
     ports:
+      # Map port 8501 on your computer (localhost) to port 8501 inside the container.
       - "8501:8501"
-    # --- START: ADDED THIS SECTION ---
-    # Add a public DNS server to resolve network issues inside the container.
     dns:
+      # Add a public DNS server to resolve network issues inside the container.
       - 8.8.8.8
-    # --- END: ADDED THIS SECTION ---
 
+# Define the persistent volume used by the 'db' service.
 volumes:
   postgres_data:
