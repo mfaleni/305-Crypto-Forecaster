@@ -23,7 +23,7 @@ def fetch_coinglass_data(symbol: str) -> dict:
     
     headers = {
         'accept': 'application/json',
-        'cg-access-key': coinglass_api_key  # Use the correct header name for authentication
+        'coinglassSecret': coinglass_api_key 
     }
 
     api_symbol = symbol.replace("-USD", "")
@@ -32,22 +32,16 @@ def fetch_coinglass_data(symbol: str) -> dict:
         'leverage_ratio': 0.0, 'futures_volume_24h': 0.0
     }
     try:
-        # Use the authenticated endpoint for all metrics
-        url = f"https://api.coinglass.com/api/v4/futures/indicator/funding_rate_all_history?symbol={api_symbol}&time_type=h8"
+        # Using a more direct endpoint for key metrics
+        url = f"https://open-api.coinglass.com/public/v2/perpetual_market?ex=Binance&symbol={api_symbol}"
         
         response = requests.get(url, headers=headers)
         if response.ok and response.json().get('data'):
-            latest_data = response.json()['data'][-1]
-            data['funding_rate'] = latest_data.get('fundingRate', 0.0) * 100
+            latest_data = response.json()['data'][0]
+            data['funding_rate'] = latest_data.get('rate', 0.0) * 100
             data['open_interest'] = latest_data.get('openInterest', 0.0)
-            data['futures_volume_24h'] = latest_data.get('volume', 0.0)
-            
-        # For long/short ratio, we use a different v4 endpoint
-        ls_url = f"https://api.coinglass.com/api/v4/futures/indicator/ls_ratio_all_history?symbol={api_symbol}&time_type=h8"
-        ls_res = requests.get(ls_url, headers=headers)
-        if ls_res.ok and ls_res.json().get('data'):
-            ls_latest = ls_res.json()['data'][-1]
-            data['long_short_ratio'] = ls_latest.get('lsRatio', 0.0)
+            data['futures_volume_24h'] = latest_data.get('volUsd', 0.0)
+            data['long_short_ratio'] = latest_data.get('longShortRatio', 0.0)
 
         print("   [SUCCESS] Futures data fetched.")
         return data
