@@ -13,7 +13,7 @@ import time
 # --- API HELPER FUNCTIONS ---
 
 def fetch_coinglass_data(symbol: str) -> dict:
-    """Fetches advanced futures and derivatives data using the authenticated CoinGlass API."""
+    """Fetches advanced futures data from CoinGlass using the definitive, proven endpoint."""
     print(f"   [INFO] Fetching futures data for {symbol} from CoinGlass (Hobbyist Tier)...")
     
     coinglass_api_key = os.getenv("COINGLASS_API_KEY")
@@ -27,27 +27,40 @@ def fetch_coinglass_data(symbol: str) -> dict:
     }
 
     api_symbol = symbol.replace("-USD", "")
-    data = {
-        'funding_rate': 0.0, 'open_interest': 0.0, 'long_short_ratio': 0.0,
-        'leverage_ratio': 0.0, 'futures_volume_24h': 0.0
-    }
+    data = {'funding_rate': 0.0, 'open_interest': 0.0, 'long_short_ratio': 0.0, 'futures_volume_24h': 0.0}
+
     try:
-        # Using a more direct endpoint for key metrics
+        # Definitive v2 endpoint that provides all data in one call
         url = f"https://open-api.coinglass.com/public/v2/perpetual_market?ex=Binance&symbol={api_symbol}"
         
         response = requests.get(url, headers=headers)
-        if response.ok and response.json().get('data'):
-            latest_data = response.json()['data'][0]
-            data['funding_rate'] = latest_data.get('rate', 0.0) * 100
-            data['open_interest'] = latest_data.get('openInterest', 0.0)
-            data['futures_volume_24h'] = latest_data.get('volUsd', 0.0)
-            data['long_short_ratio'] = latest_data.get('longShortRatio', 0.0)
 
-        print("   [SUCCESS] Futures data fetched.")
+        if response.ok and response.json().get('data'):
+            # The response contains data for all exchanges; we need to filter for the specific symbol on Binance
+            market_data_list = response.json()['data'].get(api_symbol, [])
+            binance_data = next((item for item in market_data_list if item.get("exchangeName") == "Binance"), None)
+            
+            if binance_data:
+                data['funding_rate'] = binance_data.get('rate', 0.0) * 100
+                data['open_interest'] = binance_data.get('openInterest', 0.0)
+                data['futures_volume_24h'] = binance_data.get('totalVolUsd', 0.0)
+                
+                # Calculate the Long/Short Ratio
+                long_rate = binance_data.get('longRate', 0.0)
+                short_rate = binance_data.get('shortRate', 1.0) # Default to 1 to avoid division by zero
+                data['long_short_ratio'] = long_rate / short_rate if short_rate > 0 else 0
+                
+                print("   [SUCCESS] Futures data fetched.")
+            else:
+                print(f"   [WARN] Binance data for symbol {api_symbol} not found in CoinGlass response.")
+        else:
+            print(f"   [WARN] CoinGlass request failed. Status: {response.status_code}, Response: {response.text[:100]}")
+        
         return data
+
     except Exception as e:
-        print(f"   [WARN] Could not fetch CoinGlass data: {e}")
-        return data
+        print(f"   [ERROR] A critical error occurred while fetching CoinGlass data: {e}")
+        return {}
 
 def fetch_cryptoquant_data(symbol: str) -> dict:
     """Placeholder for fetching advanced on-chain data like Exchange Supply Ratio (ESR)."""
@@ -57,7 +70,7 @@ def fetch_cryptoquant_data(symbol: str) -> dict:
     return {'exchange_supply_ratio': 0.0}
 
 def fetch_santiment_data(slug: str) -> dict:
-    """Fetches on-chain/social data for a given slug directly from the Santiment GraphQL API."""
+    """Fetches on-chain/social data with robust handling for null values."""
     print(f"   [INFO] Fetching on-chain/social data for {slug} from Santiment...")
     api_key = os.getenv("SANTIMENT_API_KEY")
     if not api_key:
@@ -66,30 +79,24 @@ def fetch_santiment_data(slug: str) -> dict:
     
     query = f"""
     query {{
-      mvrv: getMetric(metric: "mvrv_usd") {{
-        timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }}
-      }}
-      social_dominance: getMetric(metric: "social_dominance_total") {{
-        timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }}
-      }}
-      daa: getMetric(metric: "daily_active_addresses") {{
-        timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }}
-      }}
+      mvrv: getMetric(metric: "mvrv_usd") {{ timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }} }}
+      social_dominance: getMetric(metric: "social_dominance_total") {{ timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }} }}
+      daa: getMetric(metric: "daily_active_addresses") {{ timeseriesData(slug: "{slug}", from: "utc_now-2d", to: "utc_now", interval: "1d") {{ value }} }}
     }}
     """
     try:
         response = requests.post('https://api.santiment.net/graphql', json={'query': query}, headers={'Authorization': f'Apikey {api_key}'})
         response.raise_for_status()
-        data = response.json().get('data', {})
+        json_data = response.json()
         
-        mvrv_data = data.get('mvrv', {}).get('timeseriesData', [])
-        social_data = data.get('social_dominance', {}).get('timeseriesData', [])
-        daa_data = data.get('daa', {}).get('timeseriesData', [])
+        mvrv_data = json_data.get('data', {}).get('mvrv', {}).get('timeseriesData', [])
+        social_data = json_data.get('data', {}).get('social_dominance', {}).get('timeseriesData', [])
+        daa_data = json_data.get('data', {}).get('daa', {}).get('timeseriesData', [])
 
         metrics = {
-            'mvrv_usd': mvrv_data[-1]['value'] if mvrv_data else 0.0,
-            'social_dominance': social_data[-1]['value'] if social_data else 0.0,
-            'daily_active_addresses': daa_data[-1]['value'] if daa_data else 0.0
+            'mvrv_usd': mvrv_data[-1]['value'] if mvrv_data and mvrv_data[-1] else 0.0,
+            'social_dominance': social_data[-1]['value'] if social_data and social_data[-1] else 0.0,
+            'daily_active_addresses': daa_data[-1]['value'] if daa_data and daa_data[-1] else 0.0
         }
         print("   [SUCCESS] Santiment data fetched.")
         return metrics
@@ -194,7 +201,6 @@ def fetch_data(coin: str) -> pd.DataFrame:
         df['Funding_Rate'] = futures_data.get('funding_rate', 0.0)
         df['Open_Interest'] = futures_data.get('open_interest', 0.0)
         df['Long_Short_Ratio'] = futures_data.get('long_short_ratio', 0.0)
-        df['Leverage_Ratio'] = futures_data.get('leverage_ratio', 0.0)
         df['Futures_Volume_24h'] = futures_data.get('futures_volume_24h', 0.0)
         
         df['MVRV_Ratio'] = santiment_data.get('mvrv_usd', 0.0)
