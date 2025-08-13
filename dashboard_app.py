@@ -95,18 +95,37 @@ with st.expander("❓ **Explain the Sentiment Score**"):
         """
     )
 
-st.header("Daily AI Analysis")
+# --- START: MODIFIED AI ANALYSIS SECTION ---
+st.header("Daily AI Analyst Report")
 with st.container(border=True):
-    summary = coin_forecast.get('analysis_summary', 'Analysis not available.')
-    hypothesis = coin_forecast.get('analysis_hypothesis', 'Hypothesis not available.')
+    # Fetch the new, detailed report fields
+    title = coin_forecast.get('report_title', 'Analysis not available.')
+    recap = coin_forecast.get('report_recap', '')
+    bullish_case = coin_forecast.get('report_bullish', 'Bullish case not available.')
+    bearish_case = coin_forecast.get('report_bearish', 'Bearish case not available.')
+    hypothesis = coin_forecast.get('report_hypothesis', 'Hypothesis not available.')
     news_links_json = coin_forecast.get('analysis_news_links', '[]')
     
-    st.subheader("Today's Summary")
-    st.markdown(summary)
+    # Display the new, structured report
+    st.subheader(title)
+    st.caption(recap)
     
-    st.subheader("Analyst's Hypothesis")
-    st.markdown(hypothesis)
+    st.markdown("---")
+
+    col_bull, col_bear = st.columns(2)
+    with col_bull:
+        st.markdown("#### Bullish Case 🐂")
+        st.markdown(bullish_case)
+    with col_bear:
+        st.markdown("#### Bearish Case 🐻")
+        st.markdown(bearish_case)
     
+    st.markdown("---")
+
+    st.subheader("Analyst's Final Hypothesis")
+    with st.container(border=True):
+        st.markdown(hypothesis)
+
     st.subheader("Influential News")
     try:
         news_links = json.loads(news_links_json) if pd.notna(news_links_json) else []
@@ -120,6 +139,7 @@ with st.container(border=True):
 
     st.markdown("---")
     st.subheader("Provide Feedback on this Analysis")
+    # The feedback mechanism remains unchanged
     record_id = coin_forecast['id']
     current_feedback = coin_forecast.get('user_feedback')
     if pd.notna(current_feedback):
@@ -149,8 +169,11 @@ with st.container(border=True):
                     st.rerun()
                 else:
                     st.error("Failed to save correction.")
+# --- END: MODIFIED AI ANALYSIS SECTION ---
+
 
 st.header("Professional Grade Market Indicators")
+# ... (This section and all subsequent sections remain unchanged) ...
 with st.container(border=True):
     st.subheader("Futures & Derivatives Data (from CoinGlass)")
     cg_col1, cg_col2, cg_col3 = st.columns(3)

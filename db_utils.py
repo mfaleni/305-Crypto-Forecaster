@@ -2,11 +2,35 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine, text, inspect, Table, Column, MetaData, Integer, String, Float, DateTime
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise Exception("DATABASE_URL environment variable is not set.")
+# --- START: MODIFIED DATABASE CONNECTION LOGIC ---
+# This new logic intelligently connects to Render (cloud) or Docker (local)
 
-engine = create_engine(DATABASE_URL)
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine = None
+
+if DATABASE_URL:
+    # If a DATABASE_URL is provided (for Render), use it directly.
+    print("   [INFO] Connecting to cloud database (Render)...")
+    engine = create_engine(DATABASE_URL)
+else:
+    # If DATABASE_URL is not set, build the URL from local DB credentials.
+    print("   [INFO] Connecting to local database (Docker)...")
+    db_user = os.getenv("DB_USER")
+    db_pass = os.getenv("DB_PASSWORD")
+    db_host = os.getenv("DB_HOST")
+    db_port = os.getenv("DB_PORT")
+    db_name = os.getenv("DB_NAME")
+    
+    # Check if all required local DB variables are present
+    if not all([db_user, db_pass, db_host, db_port, db_name]):
+        raise Exception("Missing one or more required local database environment variables (DB_USER, DB_PASSWORD, etc.).")
+    
+    local_db_url = f"postgresql+psycopg://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+    engine = create_engine(local_db_url)
+
+# --- END: MODIFIED DATABASE CONNECTION LOGIC ---
+
+
 metadata = MetaData()
 
 forecasts_table = Table('forecasts', metadata,
@@ -21,28 +45,22 @@ forecasts_table = Table('forecasts', metadata,
     Column('MACD', Float),
     Column('All_Time_High', Float),
     Column('High_Forecast_5_Day', String),
-    # --- CoinGlass Futures Data ---
     Column('Funding_Rate', Float),
     Column('Open_Interest', Float),
     Column('Long_Short_Ratio', Float),
-    # --- Santiment On-Chain/Social Data ---
     Column('MVRV_Ratio', Float),
     Column('Social_Dominance', Float),
     Column('Daily_Active_Addresses', Float),
-    # --- LunarCrush Social Data ---
     Column('Galaxy_Score', Float),
     Column('Alt_Rank', Float),
-    # --- Old AI Analysis Fields (can be deprecated later) ---
     Column('analysis_summary', String),
     Column('analysis_hypothesis', String),
     Column('analysis_news_links', String),
-    # --- START: ADDED NEW REPORT COLUMNS ---
     Column('report_title', String),
     Column('report_recap', String),
     Column('report_bullish', String),
     Column('report_bearish', String),
     Column('report_hypothesis', String),
-    # --- END: ADDED NEW REPORT COLUMNS ---
     Column('user_feedback', String),
     Column('user_correction', String)
 )
@@ -50,8 +68,6 @@ forecasts_table = Table('forecasts', metadata,
 def init_db():
     print("   [INFO] Initializing database...")
     try:
-        # This will add the new columns to the existing table if they don't exist,
-        # without deleting the table.
         metadata.create_all(engine, checkfirst=True)
         print("   [SUCCESS] Database initialized and schema verified.")
     except Exception as e:
@@ -62,6 +78,9 @@ def save_forecast_results(results_df: pd.DataFrame):
     print("   [INFO] Saving forecast results to the database...")
     try:
         results_df['Date'] = pd.to_datetime(results_df['Date'])
+        # Add a check for the 'Exchange_Net_Flow' column before saving
+        if 'Exchange_Net_Flow' not in forecasts_table.columns:
+             results_df = results_df.drop(columns=['Exchange_Net_Flow'], errors='ignore')
         results_df.to_sql('forecasts', engine, if_exists='append', index=False)
         print(f"   [SUCCESS] Saved {len(results_df)} new records to the database.")
     except Exception as e:
@@ -71,7 +90,6 @@ def save_forecast_results(results_df: pd.DataFrame):
 def load_forecast_results() -> pd.DataFrame:
     print("   [INFO] Loading forecast results from the database...")
     try:
-        # Ensure we load all new columns
         query = text("SELECT * FROM forecasts ORDER BY \"Date\" DESC, id DESC")
         with engine.connect() as connection:
             df = pd.read_sql_query(query, connection)

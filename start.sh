@@ -7,6 +7,6 @@ set -e
 echo "--- Running daily analysis script ---"
 python daily_runner.py
 
-# Then, start the streamlit dashboard
+# Then, start the streamlit dashboard on all network interfaces
 echo "--- Starting Streamlit dashboard ---"
-streamlit run dashboard_app.py
+streamlit run dashboard_app.py --server.port 8501 --server.address 0.0.0.0
