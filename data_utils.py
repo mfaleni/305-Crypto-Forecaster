@@ -13,10 +13,9 @@ import time
 # --- API HELPER FUNCTIONS ---
 
 def fetch_coinglass_data(symbol: str) -> dict:
-    """Fetches advanced futures and derivatives data for a given symbol from the CoinGlass API."""
-    print(f"   [INFO] Fetching futures data for {symbol} from CoinGlass...")
+    """Fetches advanced futures and derivatives data using the authenticated CoinGlass API."""
+    print(f"   [INFO] Fetching futures data for {symbol} from CoinGlass (Hobbyist Tier)...")
     
-    # --- START: MODIFIED SECTION ---
     coinglass_api_key = os.getenv("COINGLASS_API_KEY")
     if not coinglass_api_key:
         print("   [WARN] COINGLASS_API_KEY not found. Skipping.")
@@ -24,9 +23,8 @@ def fetch_coinglass_data(symbol: str) -> dict:
     
     headers = {
         'accept': 'application/json',
-        'coinglassSecret': coinglass_api_key
+        'cg-access-key': coinglass_api_key  # Use the correct header name for authentication
     }
-    # --- END: MODIFIED SECTION ---
 
     api_symbol = symbol.replace("-USD", "")
     data = {
@@ -34,35 +32,22 @@ def fetch_coinglass_data(symbol: str) -> dict:
         'leverage_ratio': 0.0, 'futures_volume_24h': 0.0
     }
     try:
-        funding_url = f"https://open-api.coinglass.com/public/v2/funding?ex=Binance&symbol={api_symbol}"
-        oi_url = f"https://open-api.coinglass.com/public/v2/open_interest?ex=Binance&symbol={api_symbol}"
-        ls_url = f"https://open-api.coinglass.com/public/v2/long_short?ex=Binance&symbol={api_symbol}"
-        leverage_url = f"https://open-api.coinglass.com/public/v2/indicator/long_short_accounts?ex=Binance&symbol={api_symbol}&interval=1h"
-        volume_url = f"https://open-api.coinglass.com/public/v2/indicator/open_interest_ohlc?ex=Binance&symbol={api_symbol}&interval=24h"
-
-        funding_res = requests.get(funding_url, headers=headers)
-        if funding_res.ok and funding_res.json().get('data'):
-            data['funding_rate'] = funding_res.json()['data'][0].get('rate', 0.0) * 100
+        # Use the authenticated endpoint for all metrics
+        url = f"https://api.coinglass.com/api/v4/futures/indicator/funding_rate_all_history?symbol={api_symbol}&time_type=h8"
         
-        oi_res = requests.get(oi_url, headers=headers)
-        if oi_res.ok and oi_res.json().get('data'):
-            data['open_interest'] = oi_res.json()['data'][0].get('openInterest', 0.0)
-
+        response = requests.get(url, headers=headers)
+        if response.ok and response.json().get('data'):
+            latest_data = response.json()['data'][-1]
+            data['funding_rate'] = latest_data.get('fundingRate', 0.0) * 100
+            data['open_interest'] = latest_data.get('openInterest', 0.0)
+            data['futures_volume_24h'] = latest_data.get('volume', 0.0)
+            
+        # For long/short ratio, we use a different v4 endpoint
+        ls_url = f"https://api.coinglass.com/api/v4/futures/indicator/ls_ratio_all_history?symbol={api_symbol}&time_type=h8"
         ls_res = requests.get(ls_url, headers=headers)
         if ls_res.ok and ls_res.json().get('data'):
-            data['long_short_ratio'] = ls_res.json()['data'][0].get('longShortRatio', 0.0)
-
-        leverage_res = requests.get(leverage_url, headers=headers)
-        if leverage_res.ok and leverage_res.json().get('data'):
-            latest_leverage_data = leverage_res.json()['data'][-1]
-            longs = latest_leverage_data.get('longVolUsd', 0)
-            shorts = latest_leverage_data.get('shortVolUsd', 0)
-            if shorts > 0:
-                data['leverage_ratio'] = longs / shorts
-
-        volume_res = requests.get(volume_url, headers=headers)
-        if volume_res.ok and volume_res.json().get('data'):
-            data['futures_volume_24h'] = volume_res.json()['data'][0][4]
+            ls_latest = ls_res.json()['data'][-1]
+            data['long_short_ratio'] = ls_latest.get('lsRatio', 0.0)
 
         print("   [SUCCESS] Futures data fetched.")
         return data
@@ -73,6 +58,7 @@ def fetch_coinglass_data(symbol: str) -> dict:
 def fetch_cryptoquant_data(symbol: str) -> dict:
     """Placeholder for fetching advanced on-chain data like Exchange Supply Ratio (ESR)."""
     print(f"   [INFO] Fetching advanced on-chain data for {symbol} from CryptoQuant...")
+    # To implement: Add CRYPTOQUANT_API_KEY to .env and make the API call here.
     print("   [SUCCESS] CryptoQuant data fetched (placeholder).")
     return {'exchange_supply_ratio': 0.0}
 
