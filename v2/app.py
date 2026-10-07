@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 from v2.binance_client import BinanceUSClient
 from v2.engine import CostModel, StrategyConfig, add_features, backtest, signal_row
-from v2.scalp import ScalpPosition, rebuy_metrics, eth_reentry_plan, btc_reentry_plan
+from v2.scalp import ScalpPosition, rebuy_metrics, eth_reentry_plan
 
 st.set_page_config(page_title="305 Crypto Scalping Agent V2", page_icon="₿", layout="wide")
 st.title("₿ 305 Crypto Scalping Agent V2")
@@ -58,8 +58,8 @@ c.metric("ETH sold","6.692951 ETH")
 eth=ScalpPosition("ETHUSDC",6.692951,2577.0,6.692951*2577.0)
 d.metric("ETH scalp pool",f"${eth.net_proceeds:,.0f}")
 
-st.markdown("**BTC accumulation ladder — separate capital**")
-st.dataframe(pd.DataFrame(btc_reentry_plan()),use_container_width=True,hide_index=True)
+st.markdown("**BTC accumulation pool — strategy levels are signal-driven**")
+st.info("No static BTC buy ladder is shown. Use the live BTC regime, backtest evidence, and paper results below before changing accumulation levels.")
 
 st.markdown("**Open ETH → USDC scalp**")
 eth_px=float(snapshots["ETHUSDC"][2].close) if snapshots["ETHUSDC"][2] is not None else 2577.0
