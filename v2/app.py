@@ -1,6 +1,12 @@
 from __future__ import annotations
 import pandas as pd
 import streamlit as st
+import sys
+from pathlib import Path
+
+# Streamlit runs this file as a script; include the repository root for package imports.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from v2.binance_client import BinanceUSClient
 from v2.engine import CostModel, StrategyConfig, add_features, backtest, signal_row
 from v2.scalp import ScalpPosition, rebuy_metrics, eth_reentry_plan
